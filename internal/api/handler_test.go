@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/bikinitop/tracker/internal/tracker"
@@ -71,6 +72,107 @@ func TestTrackHandler_ReturnsPixelGIF(t *testing.T) {
 	contentType := rr.Header().Get("Content-Type")
 	if contentType != "image/gif" {
 		t.Errorf("expected Content-Type image/gif, got %s", contentType)
+	}
+}
+
+func TestTrackHandler_ReturnsCORSHeaders(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/matomo.php?idsite=1&rec=1", nil)
+	rr := httptest.NewRecorder()
+
+	handler := TrackHandler(nil)
+	handler.ServeHTTP(rr, req)
+
+	origin := rr.Header().Get("Access-Control-Allow-Origin")
+	if origin != "*" {
+		t.Errorf("expected Access-Control-Allow-Origin *, got %s", origin)
+	}
+
+	methods := rr.Header().Get("Access-Control-Allow-Methods")
+	if !strings.Contains(methods, "GET") || !strings.Contains(methods, "POST") {
+		t.Errorf("expected CORS methods to include GET and POST, got %s", methods)
+	}
+}
+
+func TestTrackHandler_ReturnsCacheControl(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/matomo.php?idsite=1&rec=1", nil)
+	rr := httptest.NewRecorder()
+
+	handler := TrackHandler(nil)
+	handler.ServeHTTP(rr, req)
+
+	cacheControl := rr.Header().Get("Cache-Control")
+	if !strings.Contains(cacheControl, "no-cache") {
+		t.Errorf("expected Cache-Control to contain no-cache, got %s", cacheControl)
+	}
+
+	pragma := rr.Header().Get("Pragma")
+	if pragma != "no-cache" {
+		t.Errorf("expected Pragma no-cache, got %s", pragma)
+	}
+}
+
+func TestTrackHandler_OptionsRequest(t *testing.T) {
+	req := httptest.NewRequest(http.MethodOptions, "/matomo.php", nil)
+	rr := httptest.NewRecorder()
+
+	handler := TrackHandler(nil)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d for OPTIONS, got %d", http.StatusOK, rr.Code)
+	}
+}
+
+func TestTrackHandler_POSTBodyParams(t *testing.T) {
+	mock := &MockPublisher{}
+	body := "idsite=1&rec=1&url=https%3A%2F%2Fexample.com&action_name=PostTest"
+	req := httptest.NewRequest(http.MethodPost, "/matomo.php", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+
+	handler := TrackHandler(mock)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	if len(mock.Events) != 1 {
+		t.Fatalf("expected 1 published event, got %d", len(mock.Events))
+	}
+
+	event := mock.Events[0]
+	if event.SiteID != "1" {
+		t.Errorf("expected SiteID 1, got %s", event.SiteID)
+	}
+	if event.URL != "https://example.com" {
+		t.Errorf("expected URL https://example.com, got %s", event.URL)
+	}
+	if event.ActionName != "PostTest" {
+		t.Errorf("expected ActionName PostTest, got %s", event.ActionName)
+	}
+}
+
+func TestTrackHandler_POSTOverridesQuery(t *testing.T) {
+	mock := &MockPublisher{}
+	body := "idsite=2&rec=1&url=https%3A%2F%2Fpost.com"
+	req := httptest.NewRequest(http.MethodPost, "/matomo.php?idsite=1&rec=1", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+
+	handler := TrackHandler(mock)
+	handler.ServeHTTP(rr, req)
+
+	if len(mock.Events) != 1 {
+		t.Fatalf("expected 1 published event, got %d", len(mock.Events))
+	}
+
+	event := mock.Events[0]
+	if event.SiteID != "2" {
+		t.Errorf("expected POST body to override query param, got SiteID %s", event.SiteID)
+	}
+	if event.URL != "https://post.com" {
+		t.Errorf("expected URL https://post.com, got %s", event.URL)
 	}
 }
 

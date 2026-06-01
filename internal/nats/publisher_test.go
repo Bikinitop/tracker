@@ -36,8 +36,8 @@ func TestPublisher_PublishEvent(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if mock.Subject != "tracker.events.1" {
-		t.Errorf("expected subject tracker.events.1, got %s", mock.Subject)
+	if mock.Subject != "tracker.1.pageview" {
+		t.Errorf("expected subject tracker.1.pageview, got %s", mock.Subject)
 	}
 
 	if len(mock.Published) != 1 {

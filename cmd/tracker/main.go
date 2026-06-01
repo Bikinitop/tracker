@@ -16,8 +16,9 @@ import (
 )
 
 type server struct {
-	router http.Handler
-	addr   string
+	router    http.Handler
+	addr      string
+	connector natsConnector
 }
 
 type natsConnector interface {
@@ -27,19 +28,20 @@ type natsConnector interface {
 
 func newServer(cfg *config.Config, connectFunc func(string) (natsConnector, error)) (*server, error) {
 	var publisher api.EventPublisher
+	var connector natsConnector
 	if cfg.NATSURL != "" {
-		connector, err := connectFunc(cfg.NATSURL)
+		var err error
+		connector, err = connectFunc(cfg.NATSURL)
 		if err != nil {
 			return nil, fmt.Errorf("failed to connect to NATS: %w", err)
 		}
-		defer connector.Close()
 		publisher = nats.NewClientWrapper(connector)
 	}
 
 	router := api.NewRouter(publisher)
 	addr := fmt.Sprintf(":%s", cfg.Port)
 
-	return &server{router: router, addr: addr}, nil
+	return &server{router: router, addr: addr, connector: connector}, nil
 }
 
 func runWithContext(ctx context.Context, cfg *config.Config, connectFunc func(string) (natsConnector, error)) error {
@@ -48,19 +50,24 @@ func runWithContext(ctx context.Context, cfg *config.Config, connectFunc func(st
 		return fmt.Errorf("failed to create server: %w", err)
 	}
 
+	if srv.connector != nil {
+		defer srv.connector.Close()
+	}
+
 	server := &http.Server{
-		Addr:    srv.addr,
-		Handler: srv.router,
+		Addr:         srv.addr,
+		Handler:      srv.router,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	// Graceful shutdown handling
 	go func() {
-		select {
-		case <-ctx.Done():
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			server.Shutdown(shutdownCtx)
-		}
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		server.Shutdown(shutdownCtx)
 	}()
 
 	log.Printf("Starting tracker server on %s", srv.addr)

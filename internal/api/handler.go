@@ -17,10 +17,31 @@ type EventPublisher interface {
 // TrackHandler returns an HTTP handler for Matomo-compatible tracking requests
 func TrackHandler(publisher EventPublisher) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
 		params := make(map[string]string)
+
+		// Parse query parameters (always present)
 		for key, values := range r.URL.Query() {
 			if len(values) > 0 {
 				params[key] = values[0]
+			}
+		}
+
+		// Parse POST form body if present
+		if r.Method == http.MethodPost {
+			if err := r.ParseForm(); err == nil {
+				for key, values := range r.Form {
+					if len(values) > 0 {
+						params[key] = values[0]
+					}
+				}
 			}
 		}
 
@@ -38,6 +59,12 @@ func TrackHandler(publisher EventPublisher) http.Handler {
 		}
 
 		w.Header().Set("Content-Type", "image/gif")
-		w.Write(pixelGIF)
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
+		if _, err := w.Write(pixelGIF); err != nil {
+			// Network errors are expected; log but don't fail
+			http.Error(w, "failed to write response", http.StatusInternalServerError)
+		}
 	})
 }

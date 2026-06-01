@@ -16,7 +16,6 @@ type Event struct {
 	Language    string `json:"lang,omitempty"`
 	UserAgent   string `json:"ua,omitempty"`
 	Referrer    string `json:"urlref,omitempty"`
-	PageTitle   string `json:"action_name,omitempty"`
 }
 
 // ParseEvent validates and parses tracking parameters into an Event

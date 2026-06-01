@@ -114,8 +114,12 @@ func TestNewServer_WithNATS(t *testing.T) {
 		t.Errorf("expected addr :8080, got %s", srv.addr)
 	}
 
-	if !mock.closed {
-		t.Error("expected connector to be closed")
+	if srv.connector != mock {
+		t.Error("expected connector to be stored in server")
+	}
+
+	if mock.closed {
+		t.Error("connector should not be closed by newServer; lifecycle managed by runWithContext")
 	}
 }
 

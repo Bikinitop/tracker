@@ -22,7 +22,7 @@ This repository implements a tracker service for the Bikinitop project. It is a 
 ## Tech Stack
 - Go (latest stable)
 - NATS (nats.go client)
-- Standard library HTTP server (or lightweight router)
+- Standard library HTTP server
 
 ## Package Structure
 - `internal/api` - HTTP handlers and routing
@@ -31,7 +31,7 @@ This repository implements a tracker service for the Bikinitop project. It is a 
 - `internal/config` - Environment configuration
 
 ## NATS Subject Convention
-- Format: `tracker.events.{site_id}`
+- Format: `tracker.{site_id}.pageview`
 - Payload: JSON with all Matomo tracking parameters
 
 ## Testing Approach
