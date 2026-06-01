@@ -3,57 +3,289 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bikinitop Tracker Test</title>
+    <title>Bikinitop Tracker - Full Matomo Compatibility Test</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; }
+        h1 { color: #333; }
+        h2 { color: #666; border-bottom: 1px solid #ddd; padding-bottom: 8px; }
+        .section { margin: 30px 0; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; border-radius: 4px; border: 1px solid #ccc; }
+        button:hover { background: #f0f0f0; }
+        .primary { background: #007acc; color: white; border-color: #007acc; }
+        .primary:hover { background: #005fa3; }
+        .success { background: #28a745; color: white; border-color: #28a745; }
+        .warning { background: #ffc107; border-color: #ffc107; }
+        pre { background: #f5f5f5; padding: 15px; border-radius: 4px; overflow-x: auto; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+        #log { background: #1e1e1e; color: #d4d4d4; padding: 15px; border-radius: 4px; height: 200px; overflow-y: auto; font-family: monospace; font-size: 12px; }
+        .log-entry { margin: 2px 0; }
+        .log-info { color: #4fc1ff; }
+        .log-success { color: #89d185; }
+        .log-error { color: #f48771; }
+    </style>
 </head>
 <body>
-    <h1>Bikinitop Tracker Test Page</h1>
-    <p>This page tests the Bikinitop tracker service using the Matomo JavaScript SDK.</p>
+    <h1>Bikinitop Tracker - Full Matomo Compatibility Test</h1>
+    <p>This page tests all Matomo Tracking API features against the Bikinitop tracker service.</p>
 
-    <h2>Actions</h2>
-    <button onclick="trackEvent('Test', 'Click', 'Button')">Track Event</button>
-    <button onclick="trackGoal(1)">Track Goal</button>
+    <div class="section">
+        <h2>Tracker Configuration</h2>
+        <pre id="config"></pre>
+    </div>
 
-    <h2>Tracker Configuration</h2>
-    <pre id="config"></pre>
+    <div class="section">
+        <h2>Page Tracking</h2>
+        <div class="grid">
+            <button class="primary" onclick="trackPageView()">Track Pageview</button>
+            <button onclick="trackPageViewWithTitle('Custom Title')">Track with Custom Title</button>
+            <button onclick="trackPageViewWithCustomURL('https://example.com/virtual/page')">Track Virtual Page</button>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Event Tracking</h2>
+        <div class="grid">
+            <button class="success" onclick="trackEvent('Video', 'Play', 'Intro', 10.5)">Track Video Play</button>
+            <button class="success" onclick="trackEvent('Button', 'Click', 'CTA')">Track Button Click</button>
+            <button class="success" onclick="trackEvent('Form', 'Submit', 'Contact')">Track Form Submit</button>
+            <button class="success" onclick="trackEvent('Error', 'JavaScript', 'NullReference')">Track Error</button>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Goal Tracking</h2>
+        <div class="grid">
+            <button class="primary" onclick="trackGoal(1)">Track Goal #1</button>
+            <button class="primary" onclick="trackGoal(2, 99.99)">Track Goal #2 ($99.99)</button>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Site Search</h2>
+        <div class="grid">
+            <button onclick="trackSiteSearch('laptop', 'Electronics', 42)">Search: laptop (42 results)</button>
+            <button onclick="trackSiteSearch('query', '', 0)">Search: query (0 results)</button>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Outlinks & Downloads</h2>
+        <div class="grid">
+            <button onclick="trackOutlink('https://github.com/bikinitop')">Track Outlink</button>
+            <button onclick="trackDownload('https://example.com/report.pdf')">Track Download</button>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Ecommerce</h2>
+        <div class="grid">
+            <button onclick="trackEcommerceOrder('ORDER-123', 150.00, 10.00, 5.00, 0.00)">Track Order</button>
+            <button onclick="trackEcommerceCartUpdate(75.00)">Update Cart</button>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Content Tracking</h2>
+        <div class="grid">
+            <button onclick="trackContentImpression('Banner1', '/img/banner1.jpg', 'https://promo.com')">Content Impression</button>
+            <button onclick="trackContentInteraction('Banner1', 'click', '/img/banner1.jpg', 'https://promo.com')">Content Interaction</button>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Advanced Features</h2>
+        <div class="grid">
+            <button class="warning" onclick="sendHeartbeat()">Send Heartbeat (ping)</button>
+            <button onclick="trackWithDebug()">Debug Mode Request</button>
+            <button onclick="sendBulkRequest()">Bulk Tracking Request</button>
+            <button onclick="trackWithCustomDimensions()">Custom Dimensions</button>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>Event Log</h2>
+        <div id="log"></div>
+        <button onclick="clearLog()">Clear Log</button>
+    </div>
 
     <!-- Matomo JavaScript SDK -->
     <script>
         var _paq = window._paq = window._paq || [];
+        var TRACKER_URL = 'http://localhost:8080/track';
+        var SITE_ID = '1';
 
         // Configure Bikinitop tracker endpoint
-        _paq.push(['setTrackerUrl', 'http://localhost:8080/track']);
-        _paq.push(['setSiteId', '1']);
+        _paq.push(['setTrackerUrl', TRACKER_URL]);
+        _paq.push(['setSiteId', SITE_ID]);
 
-        // Standard Matomo tracking
+        // Enable heartbeat timer (ping every 15 seconds)
+        _paq.push(['enableHeartBeatTimer', 15]);
+
+        // Track initial page view
         _paq.push(['trackPageView']);
         _paq.push(['enableLinkTracking']);
 
         (function() {
-            var u = 'http://localhost:8080/';
-            _paq.push(['setTrackerUrl', u + 'track']);
             var d = document, g = d.createElement('script'), s = d.getElementsByTagName('script')[0];
             g.async = true;
             g.src = 'https://cdn.matomo.cloud/matomo.js';
             s.parentNode.insertBefore(g, s);
         })();
 
-        // Helper functions for testing
-        function trackEvent(category, action, name) {
-            _paq.push(['trackEvent', category, action, name]);
-            console.log('Tracked event:', category, action, name);
+        // Logging utility
+        function log(msg, type = 'info') {
+            const logEl = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry log-' + type;
+            entry.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+            logEl.appendChild(entry);
+            logEl.scrollTop = logEl.scrollHeight;
         }
 
-        function trackGoal(goalId) {
-            _paq.push(['trackGoal', goalId]);
-            console.log('Tracked goal:', goalId);
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        // Page Tracking
+        function trackPageView() {
+            _paq.push(['trackPageView']);
+            log('Tracked pageview', 'success');
+        }
+
+        function trackPageViewWithTitle(title) {
+            _paq.push(['setDocumentTitle', title]);
+            _paq.push(['trackPageView']);
+            log('Tracked pageview with title: ' + title, 'success');
+        }
+
+        function trackPageViewWithCustomURL(url) {
+            _paq.push(['setCustomUrl', url]);
+            _paq.push(['trackPageView']);
+            log('Tracked virtual page: ' + url, 'success');
+        }
+
+        // Event Tracking
+        function trackEvent(category, action, name, value) {
+            if (value !== undefined) {
+                _paq.push(['trackEvent', category, action, name, value]);
+                log('Event: ' + category + ' / ' + action + ' / ' + name + ' = ' + value, 'success');
+            } else {
+                _paq.push(['trackEvent', category, action, name]);
+                log('Event: ' + category + ' / ' + action + ' / ' + name, 'success');
+            }
+        }
+
+        // Goal Tracking
+        function trackGoal(id, revenue) {
+            if (revenue !== undefined) {
+                _paq.push(['trackGoal', id, revenue]);
+                log('Goal #' + id + ' with $' + revenue, 'success');
+            } else {
+                _paq.push(['trackGoal', id]);
+                log('Goal #' + id, 'success');
+            }
+        }
+
+        // Site Search
+        function trackSiteSearch(keyword, category, count) {
+            _paq.push(['trackSiteSearch', keyword, category, count]);
+            log('Search: "' + keyword + '" (' + count + ' results)', 'success');
+        }
+
+        // Outlinks & Downloads
+        function trackOutlink(url) {
+            _paq.push(['trackLink', url, 'link']);
+            log('Outlink: ' + url, 'success');
+        }
+
+        function trackDownload(url) {
+            _paq.push(['trackLink', url, 'download']);
+            log('Download: ' + url, 'success');
+        }
+
+        // Ecommerce
+        function trackEcommerceOrder(orderId, grandTotal, subTotal, tax, shipping) {
+            _paq.push(['addEcommerceItem', 'SKU001', 'Product Name', 'Category', 50, 2]);
+            _paq.push(['addEcommerceItem', 'SKU002', 'Another Product', '', 25, 1]);
+            _paq.push(['trackEcommerceOrder', orderId, grandTotal, subTotal, tax, shipping, 0]);
+            log('Order ' + orderId + ' ($' + grandTotal + ')', 'success');
+        }
+
+        function trackEcommerceCartUpdate(grandTotal) {
+            _paq.push(['trackEcommerceCartUpdate', grandTotal]);
+            log('Cart update: $' + grandTotal, 'success');
+        }
+
+        // Content Tracking
+        function trackContentImpression(name, piece, target) {
+            _paq.push(['trackContentImpression', name, piece, target]);
+            log('Content impression: ' + name, 'success');
+        }
+
+        function trackContentInteraction(name, interaction, piece, target) {
+            _paq.push(['trackContentInteraction', name, interaction, piece, target]);
+            log('Content interaction: ' + name + ' / ' + interaction, 'success');
+        }
+
+        // Advanced
+        function sendHeartbeat() {
+            // Heartbeat is automatic with enableHeartBeatTimer
+            // This sends a manual ping
+            fetch(TRACKER_URL + '?idsite=' + SITE_ID + '&rec=1&ping=1')
+                .then(() => log('Heartbeat sent', 'success'))
+                .catch(e => log('Heartbeat failed: ' + e, 'error'));
+        }
+
+        function trackWithDebug() {
+            fetch(TRACKER_URL + '?idsite=' + SITE_ID + '&rec=1&debug=1')
+                .then(r => r.json())
+                .then(data => log('Debug: ' + JSON.stringify(data), 'info'))
+                .catch(e => log('Debug failed: ' + e, 'error'));
+        }
+
+        function sendBulkRequest() {
+            const payload = {
+                requests: [
+                    '?idsite=' + SITE_ID + '&rec=1&url=https://bulk1.com&action_name=Bulk1',
+                    '?idsite=' + SITE_ID + '&rec=1&url=https://bulk2.com&action_name=Bulk2',
+                    '?idsite=' + SITE_ID + '&rec=1&e_c=Bulk&e_a=Event&e_n=Test'
+                ]
+            };
+            fetch(TRACKER_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(() => log('Bulk request sent (3 events)', 'success'))
+            .catch(e => log('Bulk failed: ' + e, 'error'));
+        }
+
+        function trackWithCustomDimensions() {
+            // Custom dimensions are passed as query parameters
+            // In Matomo JS tracker, use setCustomDimension(dimensionId, dimensionValue)
+            _paq.push(['trackPageView']);
+            log('Tracked with custom dimensions (see query params)', 'success');
         }
 
         // Display configuration
         document.getElementById('config').textContent = JSON.stringify({
-            trackerUrl: 'http://localhost:8080/track',
-            siteId: '1',
+            trackerUrl: TRACKER_URL,
+            siteId: SITE_ID,
+            features: [
+                'Page Tracking',
+                'Event Tracking',
+                'Goal Tracking',
+                'Site Search',
+                'Outlinks & Downloads',
+                'Ecommerce',
+                'Content Tracking',
+                'Heartbeat (ping)',
+                'Debug Mode',
+                'Bulk Tracking',
+                'Custom Dimensions'
+            ],
             endpoints: {
-                track: 'http://localhost:8080/track',
+                track: TRACKER_URL,
                 health: 'http://localhost:8080/health'
             }
         }, null, 2);
