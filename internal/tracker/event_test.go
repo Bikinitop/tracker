@@ -86,9 +86,9 @@ func TestParseEvent_FullMatomoParams(t *testing.T) {
 		"idsite":  "42",
 		"rec":     "1",
 		"url":     "https://example.com/product",
-		"_id":     "abc123",
+		"_id":     "abc123def4567890",
 		"uid":     "user456",
-		"cid":     "uuid789",
+		"cid":     "abc123def4567890",
 		"res":     "1920x1080",
 		"lang":    "en-US",
 		"ua":      "Mozilla/5.0",
@@ -103,14 +103,14 @@ func TestParseEvent_FullMatomoParams(t *testing.T) {
 	if event.SiteID != "42" {
 		t.Errorf("expected SiteID 42, got %s", event.SiteID)
 	}
-	if event.VisitorID != "abc123" {
-		t.Errorf("expected VisitorID abc123, got %s", event.VisitorID)
+	if event.VisitorID != "abc123def4567890" {
+		t.Errorf("expected VisitorID abc123def4567890, got %s", event.VisitorID)
 	}
 	if event.UserID != "user456" {
 		t.Errorf("expected UserID user456, got %s", event.UserID)
 	}
-	if event.VisitorUUID != "uuid789" {
-		t.Errorf("expected VisitorUUID uuid789, got %s", event.VisitorUUID)
+	if event.VisitorUUID != "abc123def4567890" {
+		t.Errorf("expected VisitorUUID abc123def4567890, got %s", event.VisitorUUID)
 	}
 	if event.Resolution != "1920x1080" {
 		t.Errorf("expected Resolution 1920x1080, got %s", event.Resolution)
@@ -123,6 +123,241 @@ func TestParseEvent_FullMatomoParams(t *testing.T) {
 	}
 	if event.Referrer != "https://google.com" {
 		t.Errorf("expected Referrer https://google.com, got %s", event.Referrer)
+	}
+}
+
+func TestParseEvent_AllMatomoFields(t *testing.T) {
+	params := map[string]string{
+		"idsite": "1", "rec": "1",
+		"action_name": "Home", "url": "https://example.com",
+		"_id": "abc123def4567890", "uid": "user1", "cid": "abc123def4567890",
+		"res": "1920x1080", "lang": "en-US", "ua": "Mozilla/5.0",
+		"urlref": "https://google.com",
+		"h": "14", "m": "30", "s": "45",
+		"rand": "123456", "apiv": "1",
+		"e_c": "Video", "e_a": "Play", "e_n": "Intro", "e_v": "10.5",
+		"idgoal": "2", "revenue": "99.99",
+		"search": "query", "search_cat": "Products", "search_count": "42",
+		"link": "https://outlink.com", "download": "https://example.com/file.pdf",
+		"cvar": `{"1":["OS","Mac"]}`, "_cvar": `{"2":["Browser","Chrome"]}`,
+		"pf_net": "100", "pf_srv": "200", "pf_tfr": "50",
+		"pf_dm1": "300", "pf_dm2": "150", "pf_onl": "400",
+		"ec_id": "ORDER-123", "ec_st": "80.00", "ec_tx": "5.00",
+		"ec_sh": "10.00", "ec_dt": "5.00",
+		"ec_items": `[["SKU1","Item1","Cat1",10.00,2]]`,
+		"c_n": "AdBanner", "c_p": "/img/ad.png", "c_t": "https://ad.com", "c_i": "click",
+		"dimension1": "value1", "dimension2": "value2",
+		"send_image": "0", "ping": "1", "bots": "1", "recMode": "2",
+		"cdt": "2024-01-15 10:30:00", "country": "us", "city": "NYC",
+		"token_auth": "abc123",
+	}
+
+	event, err := ParseEvent(params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if event.SiteID != "1" {
+		t.Errorf("SiteID mismatch, got %s", event.SiteID)
+	}
+	if event.ActionName != "Home" {
+		t.Errorf("ActionName mismatch, got %s", event.ActionName)
+	}
+	if event.EventCategory != "Video" {
+		t.Errorf("EventCategory mismatch, got %s", event.EventCategory)
+	}
+	if event.EventAction != "Play" {
+		t.Errorf("EventAction mismatch, got %s", event.EventAction)
+	}
+	if event.EventName != "Intro" {
+		t.Errorf("EventName mismatch, got %s", event.EventName)
+	}
+	if event.EventValue != "10.5" {
+		t.Errorf("EventValue mismatch, got %s", event.EventValue)
+	}
+	if event.GoalID != "2" {
+		t.Errorf("GoalID mismatch, got %s", event.GoalID)
+	}
+	if event.Revenue != "99.99" {
+		t.Errorf("Revenue mismatch, got %s", event.Revenue)
+	}
+	if event.SearchKeyword != "query" {
+		t.Errorf("SearchKeyword mismatch, got %s", event.SearchKeyword)
+	}
+	if event.SearchCategory != "Products" {
+		t.Errorf("SearchCategory mismatch, got %s", event.SearchCategory)
+	}
+	if event.SearchCount != "42" {
+		t.Errorf("SearchCount mismatch, got %s", event.SearchCount)
+	}
+	if event.Outlink != "https://outlink.com" {
+		t.Errorf("Outlink mismatch, got %s", event.Outlink)
+	}
+	if event.Download != "https://example.com/file.pdf" {
+		t.Errorf("Download mismatch, got %s", event.Download)
+	}
+	if event.PerfNetwork != "100" {
+		t.Errorf("PerfNetwork mismatch, got %s", event.PerfNetwork)
+	}
+	if event.PerfServer != "200" {
+		t.Errorf("PerfServer mismatch, got %s", event.PerfServer)
+	}
+	if event.PerfTransfer != "50" {
+		t.Errorf("PerfTransfer mismatch, got %s", event.PerfTransfer)
+	}
+	if event.EcommerceOrderID != "ORDER-123" {
+		t.Errorf("EcommerceOrderID mismatch, got %s", event.EcommerceOrderID)
+	}
+	if event.EcommerceSubtotal != "80.00" {
+		t.Errorf("EcommerceSubtotal mismatch, got %s", event.EcommerceSubtotal)
+	}
+	if event.EcommerceTax != "5.00" {
+		t.Errorf("EcommerceTax mismatch, got %s", event.EcommerceTax)
+	}
+	if event.EcommerceShipping != "10.00" {
+		t.Errorf("EcommerceShipping mismatch, got %s", event.EcommerceShipping)
+	}
+	if event.EcommerceDiscount != "5.00" {
+		t.Errorf("EcommerceDiscount mismatch, got %s", event.EcommerceDiscount)
+	}
+	if event.ContentName != "AdBanner" {
+		t.Errorf("ContentName mismatch, got %s", event.ContentName)
+	}
+	if event.ContentPiece != "/img/ad.png" {
+		t.Errorf("ContentPiece mismatch, got %s", event.ContentPiece)
+	}
+	if event.ContentTarget != "https://ad.com" {
+		t.Errorf("ContentTarget mismatch, got %s", event.ContentTarget)
+	}
+	if event.ContentInteraction != "click" {
+		t.Errorf("ContentInteraction mismatch, got %s", event.ContentInteraction)
+	}
+	if event.SendImage != "0" {
+		t.Errorf("SendImage mismatch, got %s", event.SendImage)
+	}
+	if event.Ping != "1" {
+		t.Errorf("Ping mismatch, got %s", event.Ping)
+	}
+	if event.RecMode != "2" {
+		t.Errorf("RecMode mismatch, got %s", event.RecMode)
+	}
+	if event.Bots != "1" {
+		t.Errorf("Bots mismatch, got %s", event.Bots)
+	}
+	if event.OverrideTime != "2024-01-15 10:30:00" {
+		t.Errorf("OverrideTime mismatch, got %s", event.OverrideTime)
+	}
+	if event.Country != "us" {
+		t.Errorf("Country mismatch, got %s", event.Country)
+	}
+	if event.City != "NYC" {
+		t.Errorf("City mismatch, got %s", event.City)
+	}
+	if event.TokenAuth != "abc123" {
+		t.Errorf("TokenAuth mismatch, got %s", event.TokenAuth)
+	}
+	if event.PageCustomVars != `{"1":["OS","Mac"]}` {
+		t.Errorf("PageCustomVars mismatch, got %s", event.PageCustomVars)
+	}
+	if event.CustomVars != `{"2":["Browser","Chrome"]}` {
+		t.Errorf("CustomVars mismatch, got %s", event.CustomVars)
+	}
+	if event.Hour != "14" {
+		t.Errorf("Hour mismatch, got %s", event.Hour)
+	}
+	if event.Minute != "30" {
+		t.Errorf("Minute mismatch, got %s", event.Minute)
+	}
+	if event.Second != "45" {
+		t.Errorf("Second mismatch, got %s", event.Second)
+	}
+	if event.Rand != "123456" {
+		t.Errorf("Rand mismatch, got %s", event.Rand)
+	}
+	if event.APIVersion != "1" {
+		t.Errorf("APIVersion mismatch, got %s", event.APIVersion)
+	}
+	if event.EcommerceItems != `[["SKU1","Item1","Cat1",10.00,2]]` {
+		t.Errorf("EcommerceItems mismatch, got %s", event.EcommerceItems)
+	}
+	if event.VisitDimensions["dimension1"] != "value1" {
+		t.Errorf("VisitDimensions[dimension1] mismatch")
+	}
+	if event.ActionDimensions["dimension2"] != "" {
+		// dimension2 should be in visit dimensions since ca is not set
+		t.Errorf("ActionDimensions[dimension2] should be empty without ca=1")
+	}
+}
+
+func TestParseEvent_CustomDimensionsActionScope(t *testing.T) {
+	params := map[string]string{
+		"idsite": "1", "rec": "1", "ca": "1",
+		"dimension1": "action_value",
+	}
+
+	event, err := ParseEvent(params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if event.ActionDimensions["dimension1"] != "action_value" {
+		t.Errorf("expected dimension1 in action scope")
+	}
+	if event.VisitDimensions["dimension1"] != "" {
+		t.Errorf("dimension1 should not be in visit scope when ca=1")
+	}
+}
+
+func TestParseEvent_Plugins(t *testing.T) {
+	params := map[string]string{
+		"idsite": "1", "rec": "1",
+		"fla": "1", "java": "1", "pdf": "1",
+	}
+
+	event, err := ParseEvent(params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if event.Plugins["fla"] != "1" {
+		t.Errorf("expected flash plugin")
+	}
+	if event.Plugins["java"] != "1" {
+		t.Errorf("expected java plugin")
+	}
+	if event.Plugins["pdf"] != "1" {
+		t.Errorf("expected pdf plugin")
+	}
+	if event.Plugins["qt"] != "" {
+		t.Errorf("qt should not be set")
+	}
+}
+
+func TestDetectActionType(t *testing.T) {
+	tests := []struct {
+		name     string
+		params   map[string]string
+		expected string
+	}{
+		{"pageview", map[string]string{"idsite": "1", "rec": "1"}, "pageview"},
+		{"event", map[string]string{"idsite": "1", "rec": "1", "e_c": "Video", "e_a": "Play"}, "event"},
+		{"goal", map[string]string{"idsite": "1", "rec": "1", "idgoal": "2"}, "goal"},
+		{"ecommerce", map[string]string{"idsite": "1", "rec": "1", "idgoal": "0"}, "ecommerce"},
+		{"search", map[string]string{"idsite": "1", "rec": "1", "search": "query"}, "search"},
+		{"outlink", map[string]string{"idsite": "1", "rec": "1", "link": "https://out.com"}, "outlink"},
+		{"download", map[string]string{"idsite": "1", "rec": "1", "download": "https://ex.com/f.pdf"}, "download"},
+		{"heartbeat", map[string]string{"idsite": "1", "rec": "1", "ping": "1"}, "heartbeat"},
+		{"content_impression", map[string]string{"idsite": "1", "rec": "1", "c_n": "Ad"}, "content_impression"},
+		{"content_interaction", map[string]string{"idsite": "1", "rec": "1", "c_n": "Ad", "c_i": "click"}, "content_interaction"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			event, _ := ParseEvent(tt.params)
+			if event.ActionType != tt.expected {
+				t.Errorf("expected action type %s, got %s", tt.expected, event.ActionType)
+			}
+		})
 	}
 }
 

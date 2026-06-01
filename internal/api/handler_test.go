@@ -22,7 +22,7 @@ func (m *MockPublisher) PublishEvent(event *tracker.Event) error {
 }
 
 func TestTrackHandler_ReturnsOK(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/matomo.php?idsite=1&rec=1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/track?idsite=1&rec=1", nil)
 	rr := httptest.NewRecorder()
 
 	handler := TrackHandler(nil)
@@ -34,7 +34,7 @@ func TestTrackHandler_ReturnsOK(t *testing.T) {
 }
 
 func TestTrackHandler_MissingIDSite_ReturnsBadRequest(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/matomo.php?rec=1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/track?rec=1", nil)
 	rr := httptest.NewRecorder()
 
 	handler := TrackHandler(nil)
@@ -46,7 +46,7 @@ func TestTrackHandler_MissingIDSite_ReturnsBadRequest(t *testing.T) {
 }
 
 func TestTrackHandler_MissingRec_ReturnsBadRequest(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/matomo.php?idsite=1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/track?idsite=1", nil)
 	rr := httptest.NewRecorder()
 
 	handler := TrackHandler(nil)
@@ -58,7 +58,7 @@ func TestTrackHandler_MissingRec_ReturnsBadRequest(t *testing.T) {
 }
 
 func TestTrackHandler_ReturnsPixelGIF(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/matomo.php?idsite=1&rec=1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/track?idsite=1&rec=1", nil)
 	rr := httptest.NewRecorder()
 
 	handler := TrackHandler(nil)
@@ -75,8 +75,36 @@ func TestTrackHandler_ReturnsPixelGIF(t *testing.T) {
 	}
 }
 
+func TestTrackHandler_SendImageZero_Returns204(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/track?idsite=1&rec=1&send_image=0", nil)
+	rr := httptest.NewRecorder()
+
+	handler := TrackHandler(nil)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNoContent {
+		t.Errorf("expected status %d, got %d", http.StatusNoContent, rr.Code)
+	}
+
+	if rr.Body.Len() != 0 {
+		t.Errorf("expected empty body for 204, got %d bytes", rr.Body.Len())
+	}
+}
+
+func TestTrackHandler_Ping_Returns204(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/track?idsite=1&rec=1&ping=1", nil)
+	rr := httptest.NewRecorder()
+
+	handler := TrackHandler(nil)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNoContent {
+		t.Errorf("expected status %d for ping, got %d", http.StatusNoContent, rr.Code)
+	}
+}
+
 func TestTrackHandler_ReturnsCORSHeaders(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/matomo.php?idsite=1&rec=1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/track?idsite=1&rec=1", nil)
 	rr := httptest.NewRecorder()
 
 	handler := TrackHandler(nil)
@@ -94,7 +122,7 @@ func TestTrackHandler_ReturnsCORSHeaders(t *testing.T) {
 }
 
 func TestTrackHandler_ReturnsCacheControl(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/matomo.php?idsite=1&rec=1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/track?idsite=1&rec=1", nil)
 	rr := httptest.NewRecorder()
 
 	handler := TrackHandler(nil)
@@ -112,7 +140,7 @@ func TestTrackHandler_ReturnsCacheControl(t *testing.T) {
 }
 
 func TestTrackHandler_OptionsRequest(t *testing.T) {
-	req := httptest.NewRequest(http.MethodOptions, "/matomo.php", nil)
+	req := httptest.NewRequest(http.MethodOptions, "/track", nil)
 	rr := httptest.NewRecorder()
 
 	handler := TrackHandler(nil)
@@ -126,7 +154,7 @@ func TestTrackHandler_OptionsRequest(t *testing.T) {
 func TestTrackHandler_POSTBodyParams(t *testing.T) {
 	mock := &MockPublisher{}
 	body := "idsite=1&rec=1&url=https%3A%2F%2Fexample.com&action_name=PostTest"
-	req := httptest.NewRequest(http.MethodPost, "/matomo.php", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/track", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rr := httptest.NewRecorder()
 
@@ -156,7 +184,7 @@ func TestTrackHandler_POSTBodyParams(t *testing.T) {
 func TestTrackHandler_POSTOverridesQuery(t *testing.T) {
 	mock := &MockPublisher{}
 	body := "idsite=2&rec=1&url=https%3A%2F%2Fpost.com"
-	req := httptest.NewRequest(http.MethodPost, "/matomo.php?idsite=1&rec=1", strings.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/track?idsite=1&rec=1", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rr := httptest.NewRecorder()
 
@@ -178,7 +206,7 @@ func TestTrackHandler_POSTOverridesQuery(t *testing.T) {
 
 func TestTrackHandler_PublishesEvent(t *testing.T) {
 	mock := &MockPublisher{}
-	req := httptest.NewRequest(http.MethodGet, "/matomo.php?idsite=1&rec=1&url=https%3A%2F%2Fexample.com&action_name=Test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/track?idsite=1&rec=1&url=https%3A%2F%2Fexample.com&action_name=Test", nil)
 	rr := httptest.NewRecorder()
 
 	handler := TrackHandler(mock)
@@ -206,7 +234,7 @@ func TestTrackHandler_PublishesEvent(t *testing.T) {
 
 func TestTrackHandler_PublishError_ReturnsServerError(t *testing.T) {
 	failingPublisher := &FailingPublisher{}
-	req := httptest.NewRequest(http.MethodGet, "/matomo.php?idsite=1&rec=1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/track?idsite=1&rec=1", nil)
 	rr := httptest.NewRecorder()
 
 	handler := TrackHandler(failingPublisher)
@@ -214,6 +242,56 @@ func TestTrackHandler_PublishError_ReturnsServerError(t *testing.T) {
 
 	if rr.Code != http.StatusInternalServerError {
 		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, rr.Code)
+	}
+}
+
+func TestTrackHandler_BulkTracking(t *testing.T) {
+	mock := &MockPublisher{}
+	body := `{"requests":["?idsite=1&rec=1&url=https://example.com","?idsite=1&rec=1&url=https://example.net"],"token_auth":"abc123"}`
+	req := httptest.NewRequest(http.MethodPost, "/track", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler := TrackHandler(mock)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	if len(mock.Events) != 2 {
+		t.Errorf("expected 2 published events, got %d", len(mock.Events))
+	}
+
+	// Check token_auth was passed through
+	if mock.Events[0].TokenAuth != "abc123" {
+		t.Errorf("expected token_auth abc123, got %s", mock.Events[0].TokenAuth)
+	}
+}
+
+func TestTrackHandler_Debug_ReturnsJSON(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/track?idsite=1&rec=1&debug=1", nil)
+	rr := httptest.NewRecorder()
+
+	handler := TrackHandler(nil)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	contentType := rr.Header().Get("Content-Type")
+	if !strings.Contains(contentType, "application/json") {
+		t.Errorf("expected JSON content type, got %s", contentType)
+	}
+
+	var debugResp map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &debugResp); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", rr.Body.String())
+	}
+
+	if debugResp["debug"] != true {
+		t.Errorf("expected debug=true")
 	}
 }
 
