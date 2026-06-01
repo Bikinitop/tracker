@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bikinitop Tracker Test</title>
+</head>
+<body>
+    <h1>Bikinitop Tracker Test Page</h1>
+    <p>This page tests the Bikinitop tracker service using the Matomo JavaScript SDK.</p>
+
+    <h2>Actions</h2>
+    <button onclick="trackEvent('Test', 'Click', 'Button')">Track Event</button>
+    <button onclick="trackGoal(1)">Track Goal</button>
+
+    <h2>Tracker Configuration</h2>
+    <pre id="config"></pre>
+
+    <!-- Matomo JavaScript SDK -->
+    <script>
+        var _paq = window._paq = window._paq || [];
+
+        // Configure Bikinitop tracker endpoint
+        _paq.push(['setTrackerUrl', 'http://localhost:8080/track']);
+        _paq.push(['setSiteId', '1']);
+
+        // Standard Matomo tracking
+        _paq.push(['trackPageView']);
+        _paq.push(['enableLinkTracking']);
+
+        (function() {
+            var u = 'http://localhost:8080/';
+            _paq.push(['setTrackerUrl', u + 'track']);
+            var d = document, g = d.createElement('script'), s = d.getElementsByTagName('script')[0];
+            g.async = true;
+            g.src = 'https://cdn.matomo.cloud/matomo.js';
+            s.parentNode.insertBefore(g, s);
+        })();
+
+        // Helper functions for testing
+        function trackEvent(category, action, name) {
+            _paq.push(['trackEvent', category, action, name]);
+            console.log('Tracked event:', category, action, name);
+        }
+
+        function trackGoal(goalId) {
+            _paq.push(['trackGoal', goalId]);
+            console.log('Tracked goal:', goalId);
+        }
+
+        // Display configuration
+        document.getElementById('config').textContent = JSON.stringify({
+            trackerUrl: 'http://localhost:8080/track',
+            siteId: '1',
+            endpoints: {
+                track: 'http://localhost:8080/track',
+                health: 'http://localhost:8080/health'
+            }
+        }, null, 2);
+    </script>
+</body>
+</html>

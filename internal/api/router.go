@@ -6,11 +6,8 @@ import "net/http"
 func NewRouter(publisher EventPublisher) http.Handler {
 	mux := http.NewServeMux()
 
-	// Branded primary endpoint
+	// Bikinitop branded tracking endpoint
 	mux.Handle("/track", TrackHandler(publisher))
-
-	// Matomo SDK compatibility alias
-	mux.Handle("/matomo.php", TrackHandler(publisher))
 
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
