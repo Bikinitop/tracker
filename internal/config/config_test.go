@@ -31,3 +31,14 @@ func TestLoad_FromEnv(t *testing.T) {
 		t.Errorf("expected NATS URL nats://custom:4222, got %s", cfg.NATSURL)
 	}
 }
+
+func TestLoad_NATS_Disabled(t *testing.T) {
+	os.Setenv("NATS_URL", "disabled")
+	defer os.Unsetenv("NATS_URL")
+
+	cfg := Load()
+
+	if cfg.NATSURL != "" {
+		t.Errorf("expected empty NATS URL when disabled, got %s", cfg.NATSURL)
+	}
+}
