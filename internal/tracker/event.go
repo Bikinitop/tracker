@@ -9,7 +9,7 @@ import (
 type Event struct {
 	// Required
 	SiteID string `json:"idsite"`
-	Rec    string `json:"rec"`
+	Rec    string `json:"rec,omitempty"`
 
 	// Recommended
 	ActionName string `json:"action_name,omitempty"`

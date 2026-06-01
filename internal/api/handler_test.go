@@ -295,6 +295,53 @@ func TestTrackHandler_Debug_ReturnsJSON(t *testing.T) {
 	}
 }
 
+func TestTrackHandler_BulkTracking_WithCharset(t *testing.T) {
+	mock := &MockPublisher{}
+	body := `{"requests":["?idsite=1&rec=1&url=https://example.com"]}`
+	req := httptest.NewRequest(http.MethodPost, "/track", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	rr := httptest.NewRecorder()
+
+	handler := TrackHandler(mock)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	if len(mock.Events) != 1 {
+		t.Errorf("expected 1 published event, got %d", len(mock.Events))
+	}
+}
+
+func TestTrackHandler_BulkTracking_InvalidJSON_Returns400(t *testing.T) {
+	body := `not json`
+	req := httptest.NewRequest(http.MethodPost, "/track", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler := TrackHandler(nil)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d for invalid JSON, got %d", http.StatusBadRequest, rr.Code)
+	}
+}
+
+func TestTrackHandler_BulkTracking_AllInvalid_Returns400(t *testing.T) {
+	body := `{"requests":["?invalid=1","?also=invalid"]}`
+	req := httptest.NewRequest(http.MethodPost, "/track", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler := TrackHandler(nil)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d when all bulk requests fail, got %d", http.StatusBadRequest, rr.Code)
+	}
+}
+
 type FailingPublisher struct{}
 
 func (f *FailingPublisher) PublishEvent(event *tracker.Event) error {

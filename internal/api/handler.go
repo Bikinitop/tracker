@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/bikinitop/tracker/internal/tracker"
 )
@@ -28,14 +29,19 @@ func TrackHandler(publisher EventPublisher) http.Handler {
 		}
 
 		// Check for bulk tracking (JSON POST body with "requests" array)
-		if r.Method == http.MethodPost && r.Header.Get("Content-Type") == "application/json" {
+		if r.Method == http.MethodPost && strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
 			body, err := io.ReadAll(r.Body)
-			if err == nil {
-				if bulk, err := tracker.ParseBulkRequest(body); err == nil {
-					processBulkRequests(w, publisher, bulk)
-					return
-				}
+			if err != nil {
+				http.Error(w, "failed to read request body", http.StatusBadRequest)
+				return
 			}
+			bulk, err := tracker.ParseBulkRequest(body)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			processBulkRequests(w, publisher, bulk)
+			return
 		}
 
 		params := make(map[string]string)
@@ -63,6 +69,7 @@ func TrackHandler(publisher EventPublisher) http.Handler {
 }
 
 func processBulkRequests(w http.ResponseWriter, publisher EventPublisher, bulk *tracker.BulkRequest) {
+	successCount := 0
 	for _, reqStr := range bulk.Requests {
 		params, err := tracker.ExtractParamsFromQueryString(reqStr)
 		if err != nil {
@@ -71,7 +78,13 @@ func processBulkRequests(w http.ResponseWriter, publisher EventPublisher, bulk *
 		if bulk.TokenAuth != "" {
 			params["token_auth"] = bulk.TokenAuth
 		}
-		publishEvent(publisher, params)
+		if publishEvent(publisher, params) {
+			successCount++
+		}
+	}
+	if successCount == 0 {
+		http.Error(w, "all bulk requests failed", http.StatusBadRequest)
+		return
 	}
 	w.WriteHeader(http.StatusOK)
 }
@@ -125,12 +138,16 @@ func processSingleRequest(w http.ResponseWriter, publisher EventPublisher, param
 	}
 }
 
-func publishEvent(publisher EventPublisher, params map[string]string) {
+// publishEvent attempts to publish a tracking event. Returns true on success.
+func publishEvent(publisher EventPublisher, params map[string]string) bool {
 	event, err := tracker.ParseEvent(params)
 	if err != nil {
-		return
+		return false
 	}
 	if publisher != nil {
-		_ = publisher.PublishEvent(event)
+		if err := publisher.PublishEvent(event); err != nil {
+			return false
+		}
 	}
+	return true
 }
