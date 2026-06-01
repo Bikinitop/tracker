@@ -1,6 +1,8 @@
 package api
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 
 	"github.com/bikinitop/tracker/internal/tracker"
@@ -25,6 +27,17 @@ func TrackHandler(publisher EventPublisher) http.Handler {
 			return
 		}
 
+		// Check for bulk tracking (JSON POST body with "requests" array)
+		if r.Method == http.MethodPost && r.Header.Get("Content-Type") == "application/json" {
+			body, err := io.ReadAll(r.Body)
+			if err == nil {
+				if bulk, err := tracker.ParseBulkRequest(body); err == nil {
+					processBulkRequests(w, publisher, bulk)
+					return
+				}
+			}
+		}
+
 		params := make(map[string]string)
 
 		// Parse query parameters (always present)
@@ -45,38 +58,79 @@ func TrackHandler(publisher EventPublisher) http.Handler {
 			}
 		}
 
-		event, err := tracker.ParseEvent(params)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		if publisher != nil {
-			if err := publisher.PublishEvent(event); err != nil {
-				http.Error(w, "failed to publish event", http.StatusInternalServerError)
-				return
-			}
-		}
-
-		// Heartbeat request — update visit duration but don't track new action
-		if event.Ping == "1" {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-
-		// Client requests HTTP 204 instead of GIF image (Chrome Apps, etc.)
-		if event.SendImage == "0" {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-
-		w.Header().Set("Content-Type", "image/gif")
-		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
-		w.Header().Set("Pragma", "no-cache")
-		w.Header().Set("Expires", "0")
-		if _, err := w.Write(pixelGIF); err != nil {
-			// Network errors are expected; log but don't fail
-			http.Error(w, "failed to write response", http.StatusInternalServerError)
-		}
+		processSingleRequest(w, publisher, params)
 	})
+}
+
+func processBulkRequests(w http.ResponseWriter, publisher EventPublisher, bulk *tracker.BulkRequest) {
+	for _, reqStr := range bulk.Requests {
+		params, err := tracker.ExtractParamsFromQueryString(reqStr)
+		if err != nil {
+			continue
+		}
+		if bulk.TokenAuth != "" {
+			params["token_auth"] = bulk.TokenAuth
+		}
+		publishEvent(publisher, params)
+	}
+	w.WriteHeader(http.StatusOK)
+}
+
+func processSingleRequest(w http.ResponseWriter, publisher EventPublisher, params map[string]string) {
+	event, err := tracker.ParseEvent(params)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if publisher != nil {
+		if err := publisher.PublishEvent(event); err != nil {
+			http.Error(w, "failed to publish event", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// Debug mode returns JSON instead of GIF
+	if event.Debug == "1" {
+		w.Header().Set("Content-Type", "application/json")
+		debugInfo := map[string]interface{}{
+			"debug":         true,
+			"idsite":        event.SiteID,
+			"action_type":   event.ActionType,
+			"parsed_params": params,
+		}
+		json.NewEncoder(w).Encode(debugInfo)
+		return
+	}
+
+	// Heartbeat request — update visit duration but don't track new action
+	if event.Ping == "1" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	// Client requests HTTP 204 instead of GIF image (Chrome Apps, etc.)
+	if event.SendImage == "0" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/gif")
+	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
+	if _, err := w.Write(pixelGIF); err != nil {
+		// Network errors are expected; log but don't fail
+		http.Error(w, "failed to write response", http.StatusInternalServerError)
+	}
+}
+
+func publishEvent(publisher EventPublisher, params map[string]string) {
+	event, err := tracker.ParseEvent(params)
+	if err != nil {
+		return
+	}
+	if publisher != nil {
+		_ = publisher.PublishEvent(event)
+	}
 }

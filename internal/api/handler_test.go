@@ -245,6 +245,56 @@ func TestTrackHandler_PublishError_ReturnsServerError(t *testing.T) {
 	}
 }
 
+func TestTrackHandler_BulkTracking(t *testing.T) {
+	mock := &MockPublisher{}
+	body := `{"requests":["?idsite=1&rec=1&url=https://example.com","?idsite=1&rec=1&url=https://example.net"],"token_auth":"abc123"}`
+	req := httptest.NewRequest(http.MethodPost, "/track", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler := TrackHandler(mock)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	if len(mock.Events) != 2 {
+		t.Errorf("expected 2 published events, got %d", len(mock.Events))
+	}
+
+	// Check token_auth was passed through
+	if mock.Events[0].TokenAuth != "abc123" {
+		t.Errorf("expected token_auth abc123, got %s", mock.Events[0].TokenAuth)
+	}
+}
+
+func TestTrackHandler_Debug_ReturnsJSON(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/track?idsite=1&rec=1&debug=1", nil)
+	rr := httptest.NewRecorder()
+
+	handler := TrackHandler(nil)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	contentType := rr.Header().Get("Content-Type")
+	if !strings.Contains(contentType, "application/json") {
+		t.Errorf("expected JSON content type, got %s", contentType)
+	}
+
+	var debugResp map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &debugResp); err != nil {
+		t.Fatalf("expected valid JSON, got: %s", rr.Body.String())
+	}
+
+	if debugResp["debug"] != true {
+		t.Errorf("expected debug=true")
+	}
+}
+
 type FailingPublisher struct{}
 
 func (f *FailingPublisher) PublishEvent(event *tracker.Event) error {
