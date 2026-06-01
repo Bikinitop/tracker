@@ -9,13 +9,26 @@ import (
 func TestRouter_TrackEndpoint(t *testing.T) {
 	router := NewRouter(&noopPublisher{})
 
-	req := httptest.NewRequest(http.MethodGet, "/matomo.php?idsite=1&rec=1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/track?idsite=1&rec=1", nil)
 	rr := httptest.NewRecorder()
 
 	router.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+}
+
+func TestRouter_MatomoAlias_ReturnsNotFound(t *testing.T) {
+	router := NewRouter(&noopPublisher{})
+
+	req := httptest.NewRequest(http.MethodGet, "/matomo.php?idsite=1&rec=1", nil)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected status %d for /matomo.php, got %d", http.StatusNotFound, rr.Code)
 	}
 }
 
