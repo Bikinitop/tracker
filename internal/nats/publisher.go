@@ -29,6 +29,6 @@ func (p *Publisher) PublishEvent(event *tracker.Event) error {
 		return fmt.Errorf("failed to marshal event: %w", err)
 	}
 
-	subject := fmt.Sprintf("tracker.%s.pageview", event.SiteID)
+	subject := fmt.Sprintf("tracker.%s.%s", event.SiteID, event.ActionType)
 	return p.client.Publish(subject, data)
 }

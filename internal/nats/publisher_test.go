@@ -21,12 +21,13 @@ func (m *MockPublisher) Publish(subject string, data []byte) error {
 	return m.Err
 }
 
-func TestPublisher_PublishEvent(t *testing.T) {
+func TestPublisher_PublishEvent_Pageview(t *testing.T) {
 	mock := &MockPublisher{}
 	publisher := NewPublisher(mock)
 
 	event := &tracker.Event{
 		SiteID:     "1",
+		ActionType: "pageview",
 		URL:        "https://example.com",
 		ActionName: "Test",
 	}
@@ -54,12 +55,48 @@ func TestPublisher_PublishEvent(t *testing.T) {
 	}
 }
 
+func TestPublisher_PublishEvent_EventType(t *testing.T) {
+	mock := &MockPublisher{}
+	publisher := NewPublisher(mock)
+
+	event := &tracker.Event{
+		SiteID:        "1",
+		ActionType:    "event",
+		EventCategory: "Video",
+		EventAction:   "Play",
+	}
+
+	_ = publisher.PublishEvent(event)
+
+	if mock.Subject != "tracker.1.event" {
+		t.Errorf("expected subject tracker.1.event, got %s", mock.Subject)
+	}
+}
+
+func TestPublisher_PublishEvent_GoalType(t *testing.T) {
+	mock := &MockPublisher{}
+	publisher := NewPublisher(mock)
+
+	event := &tracker.Event{
+		SiteID:     "1",
+		ActionType: "goal",
+		GoalID:     "2",
+	}
+
+	_ = publisher.PublishEvent(event)
+
+	if mock.Subject != "tracker.1.goal" {
+		t.Errorf("expected subject tracker.1.goal, got %s", mock.Subject)
+	}
+}
+
 func TestPublisher_PublishEvent_ClientError(t *testing.T) {
 	mock := &MockPublisher{Err: errors.New("nats connection failed")}
 	publisher := NewPublisher(mock)
 
 	event := &tracker.Event{
-		SiteID: "1",
+		SiteID:     "1",
+		ActionType: "pageview",
 	}
 
 	err := publisher.PublishEvent(event)

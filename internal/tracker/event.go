@@ -230,5 +230,33 @@ func ParseEvent(params map[string]string) (*Event, error) {
 		}
 	}
 
+	e.ActionType = detectActionType(params)
+
 	return e, nil
+}
+
+// detectActionType determines what kind of action is being tracked
+func detectActionType(params map[string]string) string {
+	switch {
+	case params["ping"] == "1":
+		return "heartbeat"
+	case params["e_c"] != "" && params["e_a"] != "":
+		return "event"
+	case params["idgoal"] != "" && params["idgoal"] != "0":
+		return "goal"
+	case params["idgoal"] == "0":
+		return "ecommerce"
+	case params["search"] != "":
+		return "search"
+	case params["link"] != "":
+		return "outlink"
+	case params["download"] != "":
+		return "download"
+	case params["c_n"] != "" && params["c_i"] != "":
+		return "content_interaction"
+	case params["c_n"] != "":
+		return "content_impression"
+	default:
+		return "pageview"
+	}
 }

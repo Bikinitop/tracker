@@ -333,6 +333,34 @@ func TestParseEvent_Plugins(t *testing.T) {
 	}
 }
 
+func TestDetectActionType(t *testing.T) {
+	tests := []struct {
+		name     string
+		params   map[string]string
+		expected string
+	}{
+		{"pageview", map[string]string{"idsite": "1", "rec": "1"}, "pageview"},
+		{"event", map[string]string{"idsite": "1", "rec": "1", "e_c": "Video", "e_a": "Play"}, "event"},
+		{"goal", map[string]string{"idsite": "1", "rec": "1", "idgoal": "2"}, "goal"},
+		{"ecommerce", map[string]string{"idsite": "1", "rec": "1", "idgoal": "0"}, "ecommerce"},
+		{"search", map[string]string{"idsite": "1", "rec": "1", "search": "query"}, "search"},
+		{"outlink", map[string]string{"idsite": "1", "rec": "1", "link": "https://out.com"}, "outlink"},
+		{"download", map[string]string{"idsite": "1", "rec": "1", "download": "https://ex.com/f.pdf"}, "download"},
+		{"heartbeat", map[string]string{"idsite": "1", "rec": "1", "ping": "1"}, "heartbeat"},
+		{"content_impression", map[string]string{"idsite": "1", "rec": "1", "c_n": "Ad"}, "content_impression"},
+		{"content_interaction", map[string]string{"idsite": "1", "rec": "1", "c_n": "Ad", "c_i": "click"}, "content_interaction"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			event, _ := ParseEvent(tt.params)
+			if event.ActionType != tt.expected {
+				t.Errorf("expected action type %s, got %s", tt.expected, event.ActionType)
+			}
+		})
+	}
+}
+
 func BenchmarkParseEvent(b *testing.B) {
 	params := map[string]string{
 		"idsite":      "1",
