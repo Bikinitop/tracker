@@ -58,6 +58,18 @@ func TrackHandler(publisher EventPublisher) http.Handler {
 			}
 		}
 
+		// Heartbeat request — update visit duration but don't track new action
+		if event.Ping == "1" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		// Client requests HTTP 204 instead of GIF image (Chrome Apps, etc.)
+		if event.SendImage == "0" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
 		w.Header().Set("Content-Type", "image/gif")
 		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 		w.Header().Set("Pragma", "no-cache")
