@@ -13,6 +13,7 @@ import (
 	"github.com/bikinitop/tracker/internal/api"
 	"github.com/bikinitop/tracker/internal/config"
 	"github.com/bikinitop/tracker/internal/nats"
+	_ "golang.org/x/time/rate"
 )
 
 type server struct {

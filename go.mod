@@ -5,6 +5,7 @@ go 1.25.3
 require (
 	github.com/nats-io/nats-server/v2 v2.14.1
 	github.com/nats-io/nats.go v1.52.0
+	golang.org/x/time v0.15.0
 )
 
 require (
@@ -17,5 +18,4 @@ require (
 	github.com/nats-io/nuid v1.0.1 // indirect
 	golang.org/x/crypto v0.51.0 // indirect
 	golang.org/x/sys v0.44.0 // indirect
-	golang.org/x/time v0.15.0 // indirect
 )
