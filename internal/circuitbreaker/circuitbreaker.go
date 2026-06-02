@@ -37,7 +37,7 @@ func (s State) String() string {
 type Config struct {
 	FailureRatio   float64       // failures/total that trips the breaker
 	MinRequests    int           // min samples in window before tripping
-	Window         time.Duration // rolling window for failure accounting
+	Window         time.Duration // tumbling window; failure/success counts reset once it elapses
 	OpenDuration   time.Duration // time in Open before probing
 	HalfOpenProbes int           // probe successes needed to close
 }
@@ -112,7 +112,10 @@ func (b *Breaker) Allow() bool {
 	}
 }
 
-// Record feeds the outcome of an allowed request back to the breaker.
+// Record feeds the outcome of an allowed request back to the breaker. It must
+// be called at most once per Allow() that returned true; calling it otherwise
+// (e.g. while the breaker is half-open without a matching probe) may distort
+// the breaker's accounting.
 func (b *Breaker) Record(success bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -138,7 +141,7 @@ func (b *Breaker) Record(success bool) {
 			b.failures++
 		}
 		total := b.successes + b.failures
-		if total >= b.cfg.MinRequests {
+		if total > 0 && total >= b.cfg.MinRequests {
 			if float64(b.failures)/float64(total) >= b.cfg.FailureRatio {
 				b.toOpen()
 			}

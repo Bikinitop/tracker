@@ -118,6 +118,16 @@ func TestBreaker_HalfOpenReopensOnProbeFailure(t *testing.T) {
 	}
 }
 
+func TestBreaker_ZeroMinRequestsDoesNotTrip(t *testing.T) {
+	cfg := testConfig()
+	cfg.MinRequests = 0
+	b := New(cfg)
+	b.Record(true)
+	if b.State() != StateClosed {
+		t.Errorf("expected Closed with MinRequests=0, got %v", b.State())
+	}
+}
+
 func TestBreaker_ConcurrentUseIsRaceFree(t *testing.T) {
 	b := New(testConfig())
 	var wg sync.WaitGroup
