@@ -58,7 +58,9 @@ func NewIPRateLimiter(r rate.Limit, burst int, ttl time.Duration, opts ...Option
 	for _, opt := range opts {
 		opt(l)
 	}
-	go l.cleanupLoop(ttl)
+	// Run cleanup more often than the TTL so idle entries are evicted promptly
+	// (rather than surviving up to ~2x TTL).
+	go l.cleanupLoop(ttl / 2)
 	return l
 }
 
