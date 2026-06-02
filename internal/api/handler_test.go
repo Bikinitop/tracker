@@ -119,6 +119,11 @@ func TestTrackHandler_ReturnsCORSHeaders(t *testing.T) {
 	if !strings.Contains(methods, "GET") || !strings.Contains(methods, "POST") {
 		t.Errorf("expected CORS methods to include GET and POST, got %s", methods)
 	}
+
+	headers := rr.Header().Get("Access-Control-Allow-Headers")
+	if !strings.Contains(headers, "Content-Type") {
+		t.Errorf("expected Access-Control-Allow-Headers to include Content-Type, got %s", headers)
+	}
 }
 
 func TestTrackHandler_ReturnsCacheControl(t *testing.T) {
@@ -267,6 +272,21 @@ func TestTrackHandler_BulkTracking(t *testing.T) {
 	if mock.Events[0].TokenAuth != "abc123" {
 		t.Errorf("expected token_auth abc123, got %s", mock.Events[0].TokenAuth)
 	}
+
+	// Verify JSON response structure
+	var resp map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("expected valid JSON response, got: %s", rr.Body.String())
+	}
+	if resp["status"] != "success" {
+		t.Errorf("expected status 'success', got %v", resp["status"])
+	}
+	if resp["tracked"] != float64(2) {
+		t.Errorf("expected tracked=2, got %v", resp["tracked"])
+	}
+	if resp["failed"] != float64(0) {
+		t.Errorf("expected failed=0, got %v", resp["failed"])
+	}
 }
 
 func TestTrackHandler_Debug_ReturnsJSON(t *testing.T) {
@@ -292,6 +312,123 @@ func TestTrackHandler_Debug_ReturnsJSON(t *testing.T) {
 
 	if debugResp["debug"] != true {
 		t.Errorf("expected debug=true")
+	}
+}
+
+func TestTrackHandler_BulkTracking_PartialSuccess(t *testing.T) {
+	body := `{"requests":["?idsite=1&rec=1","?invalid=1"]}`
+	req := httptest.NewRequest(http.MethodPost, "/track", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler := TrackHandler(nil)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("expected valid JSON response, got: %s", rr.Body.String())
+	}
+	if resp["tracked"] != float64(1) {
+		t.Errorf("expected tracked=1, got %v", resp["tracked"])
+	}
+	if resp["failed"] != float64(1) {
+		t.Errorf("expected failed=1, got %v", resp["failed"])
+	}
+	errs, ok := resp["errors"].([]interface{})
+	if !ok || len(errs) != 1 {
+		t.Errorf("expected 1 error in response, got %v", errs)
+	}
+}
+
+func TestTrackHandler_BulkTracking_FullURL(t *testing.T) {
+	body := `{"requests":["https://example.com/track?idsite=1&rec=1&action_name=FullURLTest"]}`
+	req := httptest.NewRequest(http.MethodPost, "/track", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	mock := &MockPublisher{}
+	handler := TrackHandler(mock)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	if len(mock.Events) != 1 {
+		t.Fatalf("expected 1 published event, got %d", len(mock.Events))
+	}
+	if mock.Events[0].SiteID != "1" {
+		t.Errorf("expected SiteID 1, got %s", mock.Events[0].SiteID)
+	}
+	if mock.Events[0].ActionName != "FullURLTest" {
+		t.Errorf("expected ActionName FullURLTest, got %s", mock.Events[0].ActionName)
+	}
+}
+
+func TestTrackHandler_BulkTracking_WithCharset(t *testing.T) {
+	mock := &MockPublisher{}
+	body := `{"requests":["?idsite=1&rec=1&url=https://example.com"]}`
+	req := httptest.NewRequest(http.MethodPost, "/track", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json; charset=utf-8")
+	rr := httptest.NewRecorder()
+
+	handler := TrackHandler(mock)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	if len(mock.Events) != 1 {
+		t.Errorf("expected 1 published event, got %d", len(mock.Events))
+	}
+}
+
+func TestTrackHandler_BulkTracking_InvalidJSON_Returns400(t *testing.T) {
+	body := `not json`
+	req := httptest.NewRequest(http.MethodPost, "/track", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler := TrackHandler(nil)
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d for invalid JSON, got %d", http.StatusBadRequest, rr.Code)
+	}
+}
+
+func TestTrackHandler_BulkTracking_AllInvalid_ReturnsJSON(t *testing.T) {
+	body := `{"requests":["?invalid=1","?also=invalid"]}`
+	req := httptest.NewRequest(http.MethodPost, "/track", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	handler := TrackHandler(nil)
+	handler.ServeHTTP(rr, req)
+
+	// Returns 200 with tracked=0 and errors array
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("expected valid JSON response, got: %s", rr.Body.String())
+	}
+	if resp["tracked"] != float64(0) {
+		t.Errorf("expected tracked=0, got %v", resp["tracked"])
+	}
+	if resp["failed"] != float64(2) {
+		t.Errorf("expected failed=2, got %v", resp["failed"])
+	}
+	errs, ok := resp["errors"].([]interface{})
+	if !ok || len(errs) == 0 {
+		t.Errorf("expected errors array in response")
 	}
 }
 

@@ -66,3 +66,24 @@ func TestExtractParamsFromQueryString_NoLeadingQuestion(t *testing.T) {
 		t.Errorf("expected idsite 1, got %s", params["idsite"])
 	}
 }
+
+func TestExtractParamsFromQueryString_FullURL(t *testing.T) {
+	params, err := ExtractParamsFromQueryString("https://example.com/track?idsite=1&rec=1&action_name=FullURL")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if params["idsite"] != "1" {
+		t.Errorf("expected idsite 1, got %s", params["idsite"])
+	}
+	if params["action_name"] != "FullURL" {
+		t.Errorf("expected action_name FullURL, got %s", params["action_name"])
+	}
+}
+
+func TestExtractParamsFromQueryString_InvalidPercentEncoding(t *testing.T) {
+	_, err := ExtractParamsFromQueryString("?idsite=%ZZ")
+	if err == nil {
+		t.Fatal("expected error for invalid percent-encoding")
+	}
+}
