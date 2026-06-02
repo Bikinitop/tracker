@@ -45,8 +45,19 @@ func WithClock(now func() time.Time) Option {
 
 // NewIPRateLimiter creates a limiter granting r tokens/sec with the given burst
 // per key, evicting buckets idle longer than ttl. Call Stop to release the
-// cleanup goroutine.
+// cleanup goroutine. Invalid values are clamped to safe defaults: a burst < 1
+// would reject every request, and a non-positive ttl would disable eviction
+// (an unbounded-memory leak).
 func NewIPRateLimiter(r rate.Limit, burst int, ttl time.Duration, opts ...Option) *IPRateLimiter {
+	if burst < 1 {
+		burst = 1
+	}
+	if r <= 0 {
+		r = rate.Inf
+	}
+	if ttl <= 0 {
+		ttl = time.Minute
+	}
 	l := &IPRateLimiter{
 		entries: make(map[string]*entry),
 		rate:    r,
@@ -58,8 +69,8 @@ func NewIPRateLimiter(r rate.Limit, burst int, ttl time.Duration, opts ...Option
 	for _, opt := range opts {
 		opt(l)
 	}
-	// Run cleanup more often than the TTL so idle entries are evicted promptly
-	// (rather than surviving up to ~2x TTL).
+	// Run cleanup at ttl/2 so an idle bucket is evicted within ~1.5x TTL at
+	// worst. (A cleanup interval of ttl would let buckets survive up to ~2x TTL.)
 	go l.cleanupLoop(ttl / 2)
 	return l
 }

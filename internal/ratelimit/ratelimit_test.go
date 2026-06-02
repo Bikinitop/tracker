@@ -15,6 +15,17 @@ func (l *IPRateLimiter) len() int {
 	return len(l.entries)
 }
 
+func TestNewIPRateLimiter_ClampsInvalidValues(t *testing.T) {
+	// burst 0 would otherwise reject the very first request; it is clamped to 1.
+	// A non-positive ttl is clamped so eviction stays enabled. Must not panic.
+	l := NewIPRateLimiter(rate.Limit(1), 0, -5*time.Second)
+	defer l.Stop()
+
+	if !l.Allow("1.1.1.1") {
+		t.Errorf("expected first request allowed after burst clamped to >= 1")
+	}
+}
+
 func TestIPRateLimiter_AllowsUpToBurstThenBlocks(t *testing.T) {
 	// rate of 1/sec but burst of 3: first 3 calls succeed immediately,
 	// the 4th has no token yet (no meaningful time has elapsed).

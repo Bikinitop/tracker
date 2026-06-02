@@ -142,3 +142,95 @@ func TestBreaker_ConcurrentUseIsRaceFree(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestBreaker_FailuresExpireAfterWindow(t *testing.T) {
+	current := time.Unix(1000, 0)
+	b := New(testConfig(), WithClock(func() time.Time { return current }))
+
+	// 3 failures: below MinRequests(4), stays Closed.
+	for i := 0; i < 3; i++ {
+		b.Record(false)
+	}
+	if b.State() != StateClosed {
+		t.Fatalf("precondition: expected Closed below MinRequests")
+	}
+
+	// Advance past the window so the prior failures expire.
+	current = current.Add(11 * time.Second)
+
+	// 3 more failures. If the window had NOT reset, total would be 6 and the
+	// breaker would have tripped on the 4th. With the reset it stays Closed.
+	for i := 0; i < 3; i++ {
+		b.Record(false)
+	}
+	if b.State() != StateClosed {
+		t.Errorf("expected Closed after window reset cleared old failures, got %v", b.State())
+	}
+}
+
+func TestBreaker_HalfOpenLimitsConcurrentProbes(t *testing.T) {
+	current := time.Unix(1000, 0)
+	b := New(testConfig(), WithClock(func() time.Time { return current }))
+	for i := 0; i < 4; i++ {
+		b.Record(false)
+	}
+	current = current.Add(5 * time.Second)
+
+	// HalfOpenProbes = 2: with no Record between calls, only 2 probes are
+	// admitted; the third is rejected until a probe reports back.
+	if !b.Allow() {
+		t.Errorf("probe 1 should be admitted")
+	}
+	if !b.Allow() {
+		t.Errorf("probe 2 should be admitted")
+	}
+	if b.Allow() {
+		t.Errorf("probe 3 should be rejected (inflight cap reached)")
+	}
+}
+
+func TestBreaker_IgnoresRecordWhileOpen(t *testing.T) {
+	current := time.Unix(1000, 0)
+	b := New(testConfig(), WithClock(func() time.Time { return current }))
+	for i := 0; i < 4; i++ {
+		b.Record(false)
+	}
+	if b.State() != StateOpen {
+		t.Fatalf("precondition: expected Open")
+	}
+
+	// Records while fully open must not change state; recovery is probe-driven.
+	for i := 0; i < 10; i++ {
+		b.Record(true)
+	}
+	if b.State() != StateOpen {
+		t.Errorf("expected Open to ignore records, got %v", b.State())
+	}
+	if b.Allow() {
+		t.Errorf("expected Allow to stay false before OpenDuration elapses")
+	}
+}
+
+func TestNew_ClampsInvalidConfig(t *testing.T) {
+	// A zero Config would otherwise trip on the first success (FailureRatio 0
+	// means 0 >= 0). Clamping to safe defaults must prevent that.
+	b := New(Config{})
+	b.Record(true)
+	if b.State() != StateClosed {
+		t.Errorf("expected clamped breaker to stay Closed on success, got %v", b.State())
+	}
+}
+
+func TestState_String(t *testing.T) {
+	cases := map[State]string{
+		StateClosed:   "closed",
+		StateOpen:     "open",
+		StateHalfOpen: "half-open",
+		State(99):     "unknown",
+	}
+	for s, want := range cases {
+		if got := s.String(); got != want {
+			t.Errorf("State(%d).String() = %q, want %q", int(s), got, want)
+		}
+	}
+}

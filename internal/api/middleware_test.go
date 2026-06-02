@@ -71,17 +71,49 @@ func TestRateLimitMiddleware_UsesRemoteAddrByDefault(t *testing.T) {
 	}
 }
 
-func TestRateLimitMiddleware_UsesXForwardedForWhenTrusted(t *testing.T) {
+func TestRateLimitMiddleware_UsesRightmostXForwardedForWhenTrusted(t *testing.T) {
 	stub := &stubLimiter{allow: true}
 	mw := RateLimitMiddleware(stub, true, 1, okHandler())
 
 	req := httptest.NewRequest(http.MethodGet, "/track?idsite=1&rec=1", nil)
 	req.RemoteAddr = "5.6.7.8:4321"
-	req.Header.Set("X-Forwarded-For", "1.2.3.4, 5.6.7.8")
+	// Leftmost (1.2.3.4) is client-forgeable; the rightmost (9.9.9.9) is the
+	// address our trusted proxy appended and is what we must key on.
+	req.Header.Set("X-Forwarded-For", "1.2.3.4, 9.9.9.9")
 	rr := httptest.NewRecorder()
 	mw.ServeHTTP(rr, req)
 
-	if stub.lastKey != "1.2.3.4" {
-		t.Errorf("expected leftmost XFF as key, got %q", stub.lastKey)
+	if stub.lastKey != "9.9.9.9" {
+		t.Errorf("expected rightmost XFF as key, got %q", stub.lastKey)
+	}
+}
+
+func TestClientIP_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name       string
+		remoteAddr string
+		xff        string
+		trustProxy bool
+		want       string
+	}{
+		{"remote addr with port", "1.2.3.4:5678", "", false, "1.2.3.4"},
+		{"remote addr without port falls back to raw", "1.2.3.4", "", false, "1.2.3.4"},
+		{"ipv6 remote addr", "[::1]:1234", "", false, "::1"},
+		{"trusted but empty xff falls back to remote addr", "5.6.7.8:4321", "", true, "5.6.7.8"},
+		{"trusted whitespace-only xff falls back to remote addr", "5.6.7.8:4321", "   ", true, "5.6.7.8"},
+		{"trusted single-entry xff", "5.6.7.8:4321", "9.9.9.9", true, "9.9.9.9"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/track", nil)
+			req.RemoteAddr = tt.remoteAddr
+			if tt.xff != "" {
+				req.Header.Set("X-Forwarded-For", tt.xff)
+			}
+			if got := clientIP(req, tt.trustProxy); got != tt.want {
+				t.Errorf("clientIP(%q, xff=%q, trust=%v) = %q, want %q",
+					tt.remoteAddr, tt.xff, tt.trustProxy, got, tt.want)
+			}
+		})
 	}
 }

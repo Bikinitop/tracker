@@ -8,16 +8,18 @@ import (
 	"time"
 )
 
-// ErrCircuitOpen is returned by callers when the breaker is open.
+// ErrCircuitOpen is the sentinel a caller (e.g. breakerPublisher) returns to
+// its own callers when Allow reports the breaker is open. The Breaker itself
+// does not return this error; Allow signals the open state via a false return.
 var ErrCircuitOpen = errors.New("circuit breaker open")
 
 // State is the breaker's current state.
 type State int
 
 const (
-	StateClosed State = iota
-	StateOpen
-	StateHalfOpen
+	StateClosed   State = iota // requests flow normally; failures counted in the window
+	StateOpen                  // requests are rejected until OpenDuration elapses
+	StateHalfOpen              // limited probes are admitted to test recovery
 )
 
 func (s State) String() string {
@@ -66,8 +68,25 @@ func WithClock(now func() time.Time) Option {
 	return func(b *Breaker) { b.now = now }
 }
 
-// New creates a Breaker in the Closed state.
+// New creates a Breaker in the Closed state. Invalid config values are clamped
+// to safe defaults so a misconfiguration cannot leave the breaker in a
+// pathological state (e.g. tripping under healthy load or never recovering).
 func New(cfg Config, opts ...Option) *Breaker {
+	if cfg.FailureRatio <= 0 || cfg.FailureRatio > 1 {
+		cfg.FailureRatio = 0.5
+	}
+	if cfg.MinRequests < 1 {
+		cfg.MinRequests = 1
+	}
+	if cfg.Window <= 0 {
+		cfg.Window = 10 * time.Second
+	}
+	if cfg.OpenDuration <= 0 {
+		cfg.OpenDuration = 5 * time.Second
+	}
+	if cfg.HalfOpenProbes < 1 {
+		cfg.HalfOpenProbes = 1
+	}
 	b := &Breaker{
 		cfg:   cfg,
 		now:   time.Now,

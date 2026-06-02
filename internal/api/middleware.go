@@ -10,13 +10,18 @@ import (
 )
 
 // clientIP determines the client IP used as the rate-limit key. When trustProxy
-// is true the leftmost X-Forwarded-For entry is used (only safe behind a
-// trusted proxy that sets it); otherwise the connection's RemoteAddr host.
+// is true the rightmost X-Forwarded-For entry is used — the address appended by
+// our own trusted proxy. Leftmost entries are client-supplied and forgeable, so
+// keying on them would let a client bypass the per-IP limit by spoofing a fresh
+// address per request. Otherwise the connection's RemoteAddr host is used.
 func clientIP(r *http.Request, trustProxy bool) string {
 	if trustProxy {
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-			first, _, _ := strings.Cut(xff, ",")
-			if ip := strings.TrimSpace(first); ip != "" {
+			last := xff
+			if i := strings.LastIndexByte(xff, ','); i >= 0 {
+				last = xff[i+1:]
+			}
+			if ip := strings.TrimSpace(last); ip != "" {
 				return ip
 			}
 		}

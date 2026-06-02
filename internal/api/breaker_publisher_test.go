@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -81,5 +82,30 @@ func TestHandler_CircuitOpenReturns503(t *testing.T) {
 
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Errorf("expected 503 when circuit open, got %d", rr.Code)
+	}
+}
+
+func TestHandler_CircuitOpenBulkReturns503(t *testing.T) {
+	inner := &failingPublisher{}
+	br := circuitbreaker.New(breakerTestConfig())
+	pub := NewBreakerPublisher(inner, br)
+	handler := TrackHandler(pub)
+
+	// Trip the breaker with two failing single requests.
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/track?idsite=1&rec=1", nil)
+		handler.ServeHTTP(httptest.NewRecorder(), req)
+	}
+
+	// A bulk request while the circuit is open must fail the whole batch with
+	// 503, consistent with the single-request path — not a 200 partial-success.
+	body := `{"requests":["?idsite=1&rec=1","?idsite=1&rec=1"]}`
+	req := httptest.NewRequest(http.MethodPost, "/track", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Errorf("expected 503 for bulk request when circuit open, got %d", rr.Code)
 	}
 }
