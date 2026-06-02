@@ -2,11 +2,13 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
+	"github.com/bikinitop/tracker/internal/circuitbreaker"
 	"github.com/bikinitop/tracker/internal/tracker"
 )
 
@@ -110,6 +112,10 @@ func processSingleRequest(w http.ResponseWriter, publisher EventPublisher, param
 
 	if publisher != nil {
 		if err := publisher.PublishEvent(event); err != nil {
+			if errors.Is(err, circuitbreaker.ErrCircuitOpen) {
+				http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+				return
+			}
 			http.Error(w, "failed to publish event", http.StatusInternalServerError)
 			return
 		}
