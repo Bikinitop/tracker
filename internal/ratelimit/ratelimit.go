@@ -25,13 +25,14 @@ type entry struct {
 // IPRateLimiter applies a per-key token bucket, held in process memory. A
 // background goroutine evicts buckets idle longer than ttl to bound memory.
 type IPRateLimiter struct {
-	mu      sync.Mutex
-	entries map[string]*entry
-	rate    rate.Limit
-	burst   int
-	ttl     time.Duration
-	now     func() time.Time
-	stop    chan struct{}
+	mu       sync.Mutex
+	entries  map[string]*entry
+	rate     rate.Limit
+	burst    int
+	ttl      time.Duration
+	now      func() time.Time
+	stop     chan struct{}
+	stopOnce sync.Once
 }
 
 // Option configures an IPRateLimiter.
@@ -75,9 +76,9 @@ func (l *IPRateLimiter) Allow(key string) bool {
 	return lim.Allow()
 }
 
-// Stop terminates the background cleanup goroutine.
+// Stop terminates the background cleanup goroutine. Safe to call multiple times.
 func (l *IPRateLimiter) Stop() {
-	close(l.stop)
+	l.stopOnce.Do(func() { close(l.stop) })
 }
 
 func (l *IPRateLimiter) cleanupLoop(interval time.Duration) {

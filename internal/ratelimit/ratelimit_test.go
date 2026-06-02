@@ -54,6 +54,12 @@ func TestIPRateLimiter_EvictsIdleEntries(t *testing.T) {
 	}
 }
 
+func TestIPRateLimiter_StopIsIdempotent(t *testing.T) {
+	l := NewIPRateLimiter(rate.Limit(1), 1, time.Minute)
+	l.Stop()
+	l.Stop() // must not panic
+}
+
 func TestIPRateLimiter_ConcurrentAllowIsRaceFree(t *testing.T) {
 	l := NewIPRateLimiter(rate.Limit(1000), 1000, time.Minute)
 	defer l.Stop()
