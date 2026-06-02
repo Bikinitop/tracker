@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -22,6 +23,7 @@ func TrackHandler(publisher EventPublisher) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
@@ -70,23 +72,33 @@ func TrackHandler(publisher EventPublisher) http.Handler {
 
 func processBulkRequests(w http.ResponseWriter, publisher EventPublisher, bulk *tracker.BulkRequest) {
 	successCount := 0
-	for _, reqStr := range bulk.Requests {
+	var errors []string
+	for i, reqStr := range bulk.Requests {
 		params, err := tracker.ExtractParamsFromQueryString(reqStr)
 		if err != nil {
+			errors = append(errors, fmt.Sprintf("request[%d]: %v", i, err))
 			continue
 		}
 		if bulk.TokenAuth != "" {
 			params["token_auth"] = bulk.TokenAuth
 		}
-		if publishEvent(publisher, params) {
-			successCount++
+		if err := publishEvent(publisher, params); err != nil {
+			errors = append(errors, fmt.Sprintf("request[%d]: %v", i, err))
+			continue
 		}
+		successCount++
 	}
-	if successCount == 0 {
-		http.Error(w, "all bulk requests failed", http.StatusBadRequest)
-		return
+
+	w.Header().Set("Content-Type", "application/json")
+	resp := map[string]interface{}{
+		"status":  "success",
+		"tracked": successCount,
+		"failed":  len(bulk.Requests) - successCount,
 	}
-	w.WriteHeader(http.StatusOK)
+	if len(errors) > 0 {
+		resp["errors"] = errors
+	}
+	json.NewEncoder(w).Encode(resp)
 }
 
 func processSingleRequest(w http.ResponseWriter, publisher EventPublisher, params map[string]string) {
@@ -107,10 +119,9 @@ func processSingleRequest(w http.ResponseWriter, publisher EventPublisher, param
 	if event.Debug == "1" {
 		w.Header().Set("Content-Type", "application/json")
 		debugInfo := map[string]interface{}{
-			"debug":         true,
-			"idsite":        event.SiteID,
-			"action_type":   event.ActionType,
-			"parsed_params": params,
+			"debug":       true,
+			"idsite":      event.SiteID,
+			"action_type": event.ActionType,
 		}
 		json.NewEncoder(w).Encode(debugInfo)
 		return
@@ -132,22 +143,19 @@ func processSingleRequest(w http.ResponseWriter, publisher EventPublisher, param
 	w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
 	w.Header().Set("Pragma", "no-cache")
 	w.Header().Set("Expires", "0")
-	if _, err := w.Write(pixelGIF); err != nil {
-		// Network errors are expected; log but don't fail
-		http.Error(w, "failed to write response", http.StatusInternalServerError)
-	}
+	w.Write(pixelGIF)
 }
 
-// publishEvent attempts to publish a tracking event. Returns true on success.
-func publishEvent(publisher EventPublisher, params map[string]string) bool {
+// publishEvent attempts to publish a tracking event. Returns nil on success.
+func publishEvent(publisher EventPublisher, params map[string]string) error {
 	event, err := tracker.ParseEvent(params)
 	if err != nil {
-		return false
+		return err
 	}
 	if publisher != nil {
 		if err := publisher.PublishEvent(event); err != nil {
-			return false
+			return err
 		}
 	}
-	return true
+	return nil
 }

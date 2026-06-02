@@ -90,6 +90,23 @@ func TestPublisher_PublishEvent_GoalType(t *testing.T) {
 	}
 }
 
+func TestPublisher_PublishEvent_SanitizesSubject(t *testing.T) {
+	mock := &MockPublisher{}
+	publisher := NewPublisher(mock)
+
+	event := &tracker.Event{
+		SiteID:     "1.2.3",
+		ActionType: "page*view",
+	}
+
+	_ = publisher.PublishEvent(event)
+
+	// Dots and wildcards should be replaced with underscores
+	if mock.Subject != "tracker.1_2_3.page_view" {
+		t.Errorf("expected sanitized subject tracker.1_2_3.page_view, got %s", mock.Subject)
+	}
+}
+
 func TestPublisher_PublishEvent_ClientError(t *testing.T) {
 	mock := &MockPublisher{Err: errors.New("nats connection failed")}
 	publisher := NewPublisher(mock)
