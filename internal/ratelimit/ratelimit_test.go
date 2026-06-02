@@ -8,6 +8,13 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// len reports the number of tracked entries (test-only helper).
+func (l *IPRateLimiter) len() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return len(l.entries)
+}
+
 func TestIPRateLimiter_AllowsUpToBurstThenBlocks(t *testing.T) {
 	// rate of 1/sec but burst of 3: first 3 calls succeed immediately,
 	// the 4th has no token yet (no meaningful time has elapsed).

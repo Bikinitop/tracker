@@ -62,38 +62,31 @@ func getEnv(key, defaultValue string) string {
 	return defaultValue
 }
 
-func getEnvBool(key string, defaultValue bool) bool {
+// getEnvParsed reads key and parses it with parse, falling back to defaultValue
+// when the variable is unset or fails to parse.
+func getEnvParsed[T any](key string, defaultValue T, parse func(string) (T, error)) T {
 	if value, ok := os.LookupEnv(key); ok {
-		if b, err := strconv.ParseBool(value); err == nil {
-			return b
+		if parsed, err := parse(value); err == nil {
+			return parsed
 		}
 	}
 	return defaultValue
+}
+
+func getEnvBool(key string, defaultValue bool) bool {
+	return getEnvParsed(key, defaultValue, strconv.ParseBool)
 }
 
 func getEnvInt(key string, defaultValue int) int {
-	if value, ok := os.LookupEnv(key); ok {
-		if n, err := strconv.Atoi(value); err == nil {
-			return n
-		}
-	}
-	return defaultValue
+	return getEnvParsed(key, defaultValue, strconv.Atoi)
 }
 
 func getEnvFloat(key string, defaultValue float64) float64 {
-	if value, ok := os.LookupEnv(key); ok {
-		if f, err := strconv.ParseFloat(value, 64); err == nil {
-			return f
-		}
-	}
-	return defaultValue
+	return getEnvParsed(key, defaultValue, func(s string) (float64, error) {
+		return strconv.ParseFloat(s, 64)
+	})
 }
 
 func getEnvDuration(key string, defaultValue time.Duration) time.Duration {
-	if value, ok := os.LookupEnv(key); ok {
-		if d, err := time.ParseDuration(value); err == nil {
-			return d
-		}
-	}
-	return defaultValue
+	return getEnvParsed(key, defaultValue, time.ParseDuration)
 }

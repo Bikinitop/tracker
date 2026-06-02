@@ -152,8 +152,9 @@ func (b *Breaker) Record(success bool) {
 }
 
 func (b *Breaker) rollWindow() {
-	if b.now().Sub(b.windowStart) >= b.cfg.Window {
-		b.windowStart = b.now()
+	now := b.now()
+	if now.Sub(b.windowStart) >= b.cfg.Window {
+		b.windowStart = now
 		b.failures = 0
 		b.successes = 0
 	}

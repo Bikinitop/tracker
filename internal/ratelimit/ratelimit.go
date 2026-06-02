@@ -66,13 +66,14 @@ func NewIPRateLimiter(r rate.Limit, burst int, ttl time.Duration, opts ...Option
 
 // Allow reports whether a request for key may proceed, consuming a token.
 func (l *IPRateLimiter) Allow(key string) bool {
+	now := l.now()
 	l.mu.Lock()
 	e, ok := l.entries[key]
 	if !ok {
 		e = &entry{limiter: rate.NewLimiter(l.rate, l.burst)}
 		l.entries[key] = e
 	}
-	e.lastSeen = l.now()
+	e.lastSeen = now
 	lim := e.limiter
 	l.mu.Unlock()
 	return lim.Allow()
@@ -108,10 +109,4 @@ func (l *IPRateLimiter) cleanup() {
 			delete(l.entries, k)
 		}
 	}
-}
-
-func (l *IPRateLimiter) len() int {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return len(l.entries)
 }
