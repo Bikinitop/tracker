@@ -9,7 +9,9 @@ URL is pointed at this server's **`/track`** endpoint — the default
 
 Records a tracking request. Parameters may be sent as a query string (GET) or a
 URL-encoded form body (POST). The minimum required parameters are `idsite` and
-`rec=1`.
+`rec` — both must be present and non-empty. Matomo sends `rec=1`, but the value
+is not validated (e.g. `rec=0` is still recorded); a missing/empty `idsite` or
+`rec` returns `400`.
 
 ### Response behavior
 
@@ -41,7 +43,7 @@ maps them into the published event. Parameters outside this set (and outside the
 | Param | Meaning |
 |-------|---------|
 | `idsite` | Site ID. Becomes the `{site_id}` token in the NATS subject. |
-| `rec` | Must be `1` for the request to be recorded. |
+| `rec` | Must be present and non-empty. Matomo sends `1`; the value isn't otherwise validated. |
 
 **Page / visit**
 

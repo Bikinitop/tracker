@@ -49,7 +49,8 @@ go run ./cmd/tracker            # uses defaults: :8080, nats://localhost:4222
 | GET/POST | `/track` | Matomo-compatible tracking (single or bulk). Returns a 1x1 GIF by default. |
 | GET | `/health` | Liveness/readiness probe. Returns `ok` (200). Never rate limited. |
 
-`idsite` and `rec=1` are the minimum required parameters. See
+`idsite` and a non-empty `rec` (Matomo sends `rec=1`) are the minimum required
+parameters. See
 **[docs/API.md](docs/API.md)** for the full parameter set, bulk format, and the
 response/status-code matrix.
 
