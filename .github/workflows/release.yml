@@ -22,7 +22,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       # Required for buildx to assemble the arm64 runtime image. The Go binary
       # itself cross-compiles natively in the builder stage; QEMU only handles
