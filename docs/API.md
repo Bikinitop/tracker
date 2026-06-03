@@ -1,9 +1,11 @@
 # API Reference
 
-The tracker implements the [Matomo Tracking API](https://developer.matomo.org/api-reference/tracking-api)
-parameter set. Matomo SDKs (including the JS tracker) work once their tracker
-URL is pointed at this server's **`/track`** endpoint — the default
-`matomo.php` path is intentionally not served (it returns `404`).
+The tracker accepts requests in the
+[Matomo Tracking API](https://developer.matomo.org/api-reference/tracking-api)
+format and recognizes a broad subset of its parameters (see
+[Common parameters](#common-parameters)). Matomo SDKs (including the JS tracker)
+work once their tracker URL is pointed at this server's **`/track`** endpoint —
+the default `matomo.php` path is intentionally not served (it returns `404`).
 
 ## `GET` / `POST` `/track`
 

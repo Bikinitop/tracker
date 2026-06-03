@@ -6,9 +6,10 @@ requests on a Matomo-style endpoint and publishes each event to
 for high concurrency and ships with per-IP rate limiting and a circuit breaker
 that protects against a failing NATS.
 
-- **Matomo-compatible** — supports the Matomo Tracking API parameter set
-  (single requests and bulk). Matomo SDKs (incl. the JS tracker) work once
-  pointed at the `/track` endpoint (the default `matomo.php` path is not served).
+- **Matomo-compatible** — speaks the Matomo Tracking API (single requests and
+  bulk); a recognized subset of its parameters is parsed and published. Matomo
+  SDKs (incl. the JS tracker) work once pointed at the `/track` endpoint (the
+  default `matomo.php` path is not served).
 - **NATS-native** — every event is published to `tracker.{site_id}.{action_type}`.
 - **Resilient** — per-IP token-bucket rate limiting (`429`) and a NATS-publish
   circuit breaker (`503`), both configurable and on by default.
@@ -51,8 +52,8 @@ go run ./cmd/tracker            # uses defaults: :8080, nats://localhost:4222
 
 `idsite` and a non-empty `rec` (Matomo sends `rec=1`) are the minimum required
 parameters. See
-**[docs/API.md](docs/API.md)** for the full parameter set, bulk format, and the
-response/status-code matrix.
+**[docs/API.md](docs/API.md)** for the recognized parameters (the subset mapped
+into the published event), bulk format, and the response/status-code matrix.
 
 ## Configuration
 
