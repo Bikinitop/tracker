@@ -86,16 +86,16 @@ func TestParseEvent_MinimalValid(t *testing.T) {
 
 func TestParseEvent_FullMatomoParams(t *testing.T) {
 	params := map[string]string{
-		"idsite":  "42",
-		"rec":     "1",
-		"url":     "https://example.com/product",
-		"_id":     "abc123def4567890",
-		"uid":     "user456",
-		"cid":     "abc123def4567890",
-		"res":     "1920x1080",
-		"lang":    "en-US",
-		"ua":      "Mozilla/5.0",
-		"urlref":  "https://google.com",
+		"idsite": "42",
+		"rec":    "1",
+		"url":    "https://example.com/product",
+		"_id":    "abc123def4567890",
+		"uid":    "user456",
+		"cid":    "abc123def4567890",
+		"res":    "1920x1080",
+		"lang":   "en-US",
+		"ua":     "Mozilla/5.0",
+		"urlref": "https://google.com",
 	}
 
 	event, err := ParseEvent(params)
@@ -136,7 +136,7 @@ func TestParseEvent_AllMatomoFields(t *testing.T) {
 		"_id": "abc123def4567890", "uid": "user1", "cid": "abc123def4567890",
 		"res": "1920x1080", "lang": "en-US", "ua": "Mozilla/5.0",
 		"urlref": "https://google.com",
-		"h": "14", "m": "30", "s": "45",
+		"h":      "14", "m": "30", "s": "45",
 		"rand": "123456", "apiv": "1",
 		"e_c": "Video", "e_a": "Play", "e_n": "Intro", "e_v": "10.5",
 		"idgoal": "2", "revenue": "99.99",
@@ -148,7 +148,7 @@ func TestParseEvent_AllMatomoFields(t *testing.T) {
 		"ec_id": "ORDER-123", "ec_st": "80.00", "ec_tx": "5.00",
 		"ec_sh": "10.00", "ec_dt": "5.00",
 		"ec_items": `[["SKU1","Item1","Cat1",10.00,2]]`,
-		"c_n": "AdBanner", "c_p": "/img/ad.png", "c_t": "https://ad.com", "c_i": "click",
+		"c_n":      "AdBanner", "c_p": "/img/ad.png", "c_t": "https://ad.com", "c_i": "click",
 		"dimension1": "value1", "dimension2": "value2",
 		"send_image": "0", "ping": "1", "bots": "1", "recMode": "2",
 		"cdt": "2024-01-15 10:30:00", "country": "us", "city": "NYC",
@@ -283,31 +283,68 @@ func TestParseEvent_AllMatomoFields(t *testing.T) {
 	if event.EcommerceItems != `[["SKU1","Item1","Cat1",10.00,2]]` {
 		t.Errorf("EcommerceItems mismatch, got %s", event.EcommerceItems)
 	}
-	if event.VisitDimensions["dimension1"] != "value1" {
-		t.Errorf("VisitDimensions[dimension1] mismatch")
+	if event.Dimensions["dimension1"] != "value1" {
+		t.Errorf("Dimensions[dimension1] mismatch, got %q", event.Dimensions["dimension1"])
 	}
-	if event.ActionDimensions["dimension2"] != "" {
-		// dimension2 should be in visit dimensions since ca is not set
-		t.Errorf("ActionDimensions[dimension2] should be empty without ca=1")
+	if event.Dimensions["dimension2"] != "value2" {
+		t.Errorf("Dimensions[dimension2] mismatch, got %q", event.Dimensions["dimension2"])
 	}
 }
 
-func TestParseEvent_CustomDimensionsActionScope(t *testing.T) {
-	params := map[string]string{
+// Scope (visit vs action) is fixed server-side per dimension, not derivable from
+// the request, so a stateless forwarder must not infer it from ca. All dimensionN
+// land in one map verbatim regardless of ca; the consumer assigns scope.
+func TestParseEvent_CustomDimensionsScopeAgnostic(t *testing.T) {
+	withCA := map[string]string{
 		"idsite": "1", "rec": "1", "ca": "1",
 		"dimension1": "action_value",
 	}
+	withoutCA := map[string]string{
+		"idsite": "1", "rec": "1",
+		"dimension1": "visit_value",
+	}
 
-	event, err := ParseEvent(params)
+	eCA, err := ParseEvent(withCA)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
-	if event.ActionDimensions["dimension1"] != "action_value" {
-		t.Errorf("expected dimension1 in action scope")
+	if eCA.Dimensions["dimension1"] != "action_value" {
+		t.Errorf("dimension1 not captured with ca=1: %v", eCA.Dimensions)
 	}
-	if event.VisitDimensions["dimension1"] != "" {
-		t.Errorf("dimension1 should not be in visit scope when ca=1")
+
+	eNoCA, err := ParseEvent(withoutCA)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if eNoCA.Dimensions["dimension1"] != "visit_value" {
+		t.Errorf("dimension1 not captured without ca: %v", eNoCA.Dimensions)
+	}
+}
+
+func TestParseEvent_AttributionAndOffsetParams(t *testing.T) {
+	params := map[string]string{
+		"idsite": "1", "rec": "1",
+		"_ref":   "https://news.example/article",
+		"_refts": "1700000000",
+		"cdo":    "120",
+	}
+	e, err := ParseEvent(params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if e.AttributionReferrer != "https://news.example/article" {
+		t.Errorf("AttributionReferrer = %q, want the _ref value", e.AttributionReferrer)
+	}
+	if e.AttributionReferrerTime != "1700000000" {
+		t.Errorf("AttributionReferrerTime = %q, want the _refts value", e.AttributionReferrerTime)
+	}
+	if e.TimestampOffset != "120" {
+		t.Errorf("TimestampOffset = %q, want the cdo value", e.TimestampOffset)
+	}
+	for _, k := range []string{"_ref", "_refts", "cdo"} {
+		if _, leaked := e.Extra[k]; leaked {
+			t.Errorf("promoted param %q must not leak into Extra", k)
+		}
 	}
 }
 
@@ -367,13 +404,13 @@ func TestDetectActionType(t *testing.T) {
 func TestParseEvent_CapturesUnknownParamsInExtra(t *testing.T) {
 	params := map[string]string{
 		"idsite": "1", "rec": "1",
-		"_idvc": "3", "_ref": "https://google.com", "ma_id": "9",
+		"_idvc": "3", "_viewts": "1699999999", "ma_id": "9",
 	}
 	e, err := ParseEvent(params)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := map[string]string{"_idvc": "3", "_ref": "https://google.com", "ma_id": "9"}
+	want := map[string]string{"_idvc": "3", "_viewts": "1699999999", "ma_id": "9"}
 	for k, v := range want {
 		if e.Extra[k] != v {
 			t.Errorf("Extra[%q] = %q, want %q", k, e.Extra[k], v)
@@ -411,12 +448,32 @@ func TestParseEvent_EmptyValuedUnknownParamForwarded(t *testing.T) {
 
 func TestEvent_ExtraOmittedFromJSONWhenEmpty(t *testing.T) {
 	e, _ := ParseEvent(map[string]string{"idsite": "1", "rec": "1"})
+	// Assert nil (not just absent from JSON) to lock the lazy-allocation
+	// contract: a zero-length map would also be dropped by omitempty, so the
+	// JSON check alone wouldn't catch a regression back to eager make().
+	if e.Extra != nil {
+		t.Errorf("Extra should be nil when no unknown params, got %v", e.Extra)
+	}
 	b, err := json.Marshal(e)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
 	if strings.Contains(string(b), "\"extra\"") {
 		t.Errorf("did not expect 'extra' key in JSON: %s", b)
+	}
+}
+
+func TestEvent_DimensionsOmittedFromJSONWhenEmpty(t *testing.T) {
+	e, _ := ParseEvent(map[string]string{"idsite": "1", "rec": "1"})
+	if e.Dimensions != nil {
+		t.Errorf("Dimensions should be nil when no dimensionN params, got %v", e.Dimensions)
+	}
+	b, err := json.Marshal(e)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(b), "\"dimensions\"") {
+		t.Errorf("did not expect 'dimensions' key in JSON: %s", b)
 	}
 }
 
@@ -438,7 +495,7 @@ func TestEvent_ExtraPresentInJSON(t *testing.T) {
 // Computed/aggregate fields (not read from a single param) are exempted.
 func TestParseEvent_HandledParamsCoverAllMappedKeys(t *testing.T) {
 	computed := map[string]struct{}{
-		"action_type": {}, "visit_dimensions": {}, "action_dimensions": {},
+		"action_type": {}, "dimensions": {},
 		"plugins": {}, "extra": {}, "requests": {},
 	}
 	typ := reflect.TypeOf(Event{})
@@ -465,10 +522,33 @@ func TestParseEvent_DimensionKeysNotInExtra(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(e.Extra) != 0 {
-		t.Errorf("dimensions must go to VisitDimensions, not Extra: %v", e.Extra)
+		t.Errorf("dimensions must go to Dimensions, not Extra: %v", e.Extra)
 	}
-	if e.VisitDimensions["dimension1"] != "a" {
-		t.Errorf("dimension1 not captured in VisitDimensions: %v", e.VisitDimensions)
+	if e.Dimensions["dimension1"] != "a" {
+		t.Errorf("dimension1 not captured in Dimensions: %v", e.Dimensions)
+	}
+	if e.Dimensions["dimension42"] != "b" {
+		t.Errorf("dimension42 not captured in Dimensions: %v", e.Dimensions)
+	}
+}
+
+// classifyParams routes a "dimension"-prefixed key to Dimensions before the
+// handledParams check, so the match is by prefix, not the strict dimension{N}
+// form. Pin that intentional behavior: a non-numeric suffix still lands in
+// Dimensions and never in Extra, so a future tightening to a numeric match is a
+// conscious change rather than an accidental break.
+func TestParseEvent_DimensionPrefixRoutingIsByPrefix(t *testing.T) {
+	e, err := ParseEvent(map[string]string{
+		"idsite": "1", "rec": "1", "dimensionfoo": "v",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if e.Dimensions["dimensionfoo"] != "v" {
+		t.Errorf("dimension-prefixed key should route to Dimensions: %v", e.Dimensions)
+	}
+	if _, leaked := e.Extra["dimensionfoo"]; leaked {
+		t.Errorf("dimension-prefixed key must not appear in Extra: %v", e.Extra)
 	}
 }
 
@@ -517,10 +597,10 @@ func TestNormalizeVisitorID(t *testing.T) {
 		{"0123456789ABCDEF", "0123456789abcdef", true}, // uppercase normalized
 		{"AbCdEf0123456789", "abcdef0123456789", true}, // mixed case
 		{"abc123def4567890", "abc123def4567890", true}, // existing test value
-		{"abc", "", false},                             // too short
-		{"0123456789abcdef0", "", false},               // 17 chars
-		{"zzzzzzzzzzzzzzzz", "", false},                // 16 non-hex
-		{"", "", false},                                // empty
+		{"abc", "", false},               // too short
+		{"0123456789abcdef0", "", false}, // 17 chars
+		{"zzzzzzzzzzzzzzzz", "", false},  // 16 non-hex
+		{"", "", false},                  // empty
 	}
 	for _, c := range cases {
 		gotVal, gotOK := normalizeVisitorID(c.in)
