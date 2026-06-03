@@ -35,10 +35,11 @@ rate limiting.
 
 ### Common parameters
 
-The parser recognizes the broad subset of Matomo parameters listed below and
-maps them into the published event. Parameters outside this set (and outside the
-`dimension{N}` / plugin-flag conventions) are accepted by the request but are
-**not** carried into the NATS payload. The most-used recognized parameters:
+The parser maps the parameters listed below into named fields of the published
+event. Any parameter outside this set (and outside the `dimension{N}`
+convention) is still forwarded — it is collected verbatim into an `extra` object
+on the event, so nothing the client sends is dropped. The most-used named
+parameters:
 
 **Required**
 
@@ -190,4 +191,10 @@ tracker.{site_id}.{action_type}
 
 NATS wildcard characters (`.`, `*`, `>`) in the site ID / action type are
 sanitized so they cannot break subject routing. The payload is the parsed event
-(the recognized fields above) serialized as JSON.
+serialized as JSON: recognized parameters appear as named fields, and any other
+parameters the client sent appear under an `extra` object, e.g.:
+
+```json
+{ "idsite": "1", "rec": "1", "action_type": "pageview",
+  "extra": { "_idvc": "3", "_ref": "https://google.com" } }
+```
