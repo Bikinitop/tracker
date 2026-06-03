@@ -1,8 +1,15 @@
 # Configuration
 
 All configuration is read from environment variables at startup
-(`internal/config`). Every value has a safe default, and **an unparseable value
-falls back to its default** (it does not crash the server).
+(`internal/config`). Every value has a safe default.
+
+For the **parsed** knobs — the numeric, boolean, and duration rate-limit and
+circuit-breaker settings below — an unparseable value falls back to its default
+rather than crashing. The two raw-string settings are **not** forgiving:
+`TRACKER_PORT` is used directly as the listen address (e.g. `TRACKER_PORT=abc`
+fails to bind at startup) and `NATS_URL` is passed straight to the connector
+unless it is exactly `disabled` or empty (an unreachable/invalid URL fails the
+NATS connection at startup).
 
 ## Server
 
