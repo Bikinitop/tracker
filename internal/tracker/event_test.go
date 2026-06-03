@@ -1,6 +1,8 @@
 package tracker
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -358,6 +360,92 @@ func TestDetectActionType(t *testing.T) {
 				t.Errorf("expected action type %s, got %s", tt.expected, event.ActionType)
 			}
 		})
+	}
+}
+
+func TestParseEvent_CapturesUnknownParamsInExtra(t *testing.T) {
+	params := map[string]string{
+		"idsite": "1", "rec": "1",
+		"_idvc": "3", "_ref": "https://google.com", "ma_id": "9",
+	}
+	e, err := ParseEvent(params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := map[string]string{"_idvc": "3", "_ref": "https://google.com", "ma_id": "9"}
+	for k, v := range want {
+		if e.Extra[k] != v {
+			t.Errorf("Extra[%q] = %q, want %q", k, e.Extra[k], v)
+		}
+	}
+	if len(e.Extra) != len(want) {
+		t.Errorf("Extra has %d entries, want %d: %v", len(e.Extra), len(want), e.Extra)
+	}
+}
+
+func TestParseEvent_KnownParamsNotInExtra(t *testing.T) {
+	params := map[string]string{
+		"idsite": "1", "rec": "1", "url": "http://x", "e_c": "cat", "e_a": "act",
+		"pdf": "1", "dimension3": "v", "token_auth": "t",
+	}
+	e, err := ParseEvent(params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(e.Extra) != 0 {
+		t.Errorf("expected no extras for known params, got %v", e.Extra)
+	}
+}
+
+func TestParseEvent_EmptyValuedUnknownParamForwarded(t *testing.T) {
+	e, err := ParseEvent(map[string]string{"idsite": "1", "rec": "1", "foo": ""})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	v, ok := e.Extra["foo"]
+	if !ok || v != "" {
+		t.Errorf("expected Extra[foo]=\"\" present, got ok=%v v=%q", ok, v)
+	}
+}
+
+func TestEvent_ExtraOmittedFromJSONWhenEmpty(t *testing.T) {
+	e, _ := ParseEvent(map[string]string{"idsite": "1", "rec": "1"})
+	b, err := json.Marshal(e)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(b), "\"extra\"") {
+		t.Errorf("did not expect 'extra' key in JSON: %s", b)
+	}
+}
+
+func TestEvent_ExtraPresentInJSON(t *testing.T) {
+	e, _ := ParseEvent(map[string]string{"idsite": "1", "rec": "1", "_idvc": "3"})
+	b, err := json.Marshal(e)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(b), "\"extra\"") || !strings.Contains(string(b), "\"_idvc\":\"3\"") {
+		t.Errorf("expected extra with _idvc in JSON: %s", b)
+	}
+}
+
+// Drift guard: every key the parser maps to a field must be in handledParams,
+// so a newly added field can never silently double-publish into Extra. Setting
+// every handled key to a sentinel must leave Extra empty.
+func TestParseEvent_HandledParamsCoverAllMappedKeys(t *testing.T) {
+	params := make(map[string]string)
+	for k := range handledParams {
+		params[k] = "x"
+	}
+	params["idsite"] = "1"
+	params["rec"] = "1"
+	e, err := ParseEvent(params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(e.Extra) != 0 {
+		t.Errorf("handledParams missing keys; these leaked into Extra: %v", e.Extra)
 	}
 }
 
