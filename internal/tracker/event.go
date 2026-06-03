@@ -273,6 +273,26 @@ func ParseEvent(params map[string]string) (*Event, error) {
 	// client sends is dropped from the published payload.
 	e.Extra = collectExtra(params)
 
+	// Validate visitor IDs: keep valid 16-hex values (lowercased) and demote
+	// invalid ones into Extra so a bad ID is forwarded, not trusted as a visitor
+	// key. Matches Matomo's "ignore invalid ID, still track" behavior.
+	if e.VisitorID != "" {
+		if norm, ok := normalizeVisitorID(e.VisitorID); ok {
+			e.VisitorID = norm
+		} else {
+			e.Extra = stashExtra(e.Extra, "_id", e.VisitorID)
+			e.VisitorID = ""
+		}
+	}
+	if e.VisitorUUID != "" {
+		if norm, ok := normalizeVisitorID(e.VisitorUUID); ok {
+			e.VisitorUUID = norm
+		} else {
+			e.Extra = stashExtra(e.Extra, "cid", e.VisitorUUID)
+			e.VisitorUUID = ""
+		}
+	}
+
 	e.ActionType = detectActionType(params)
 
 	return e, nil
@@ -298,6 +318,36 @@ func collectExtra(params map[string]string) map[string]string {
 		extra[key] = val
 	}
 	return extra
+}
+
+// normalizeVisitorID returns the lowercased id and ok=true when v is a
+// 16-character hexadecimal string; otherwise ok=false. A single pass validates
+// and lowercases, avoiding a regexp allocation on the request path.
+func normalizeVisitorID(v string) (string, bool) {
+	if len(v) != 16 {
+		return "", false
+	}
+	b := []byte(v)
+	for i := range b {
+		switch c := b[i]; {
+		case c >= '0' && c <= '9', c >= 'a' && c <= 'f':
+			// valid digit / lowercase hex
+		case c >= 'A' && c <= 'F':
+			b[i] = c + ('a' - 'A') // normalize to lowercase
+		default:
+			return "", false
+		}
+	}
+	return string(b), true
+}
+
+// stashExtra adds k=v to m, allocating m if nil, and returns it.
+func stashExtra(m map[string]string, k, v string) map[string]string {
+	if m == nil {
+		m = make(map[string]string)
+	}
+	m[k] = v
+	return m
 }
 
 // detectActionType determines what kind of action is being tracked

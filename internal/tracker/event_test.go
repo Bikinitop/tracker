@@ -506,3 +506,84 @@ func BenchmarkParseEvent(b *testing.B) {
 		}
 	}
 }
+
+func TestNormalizeVisitorID(t *testing.T) {
+	cases := []struct {
+		in      string
+		wantVal string
+		wantOK  bool
+	}{
+		{"0123456789abcdef", "0123456789abcdef", true},
+		{"0123456789ABCDEF", "0123456789abcdef", true}, // uppercase normalized
+		{"AbCdEf0123456789", "abcdef0123456789", true}, // mixed case
+		{"abc123def4567890", "abc123def4567890", true}, // existing test value
+		{"abc", "", false},                             // too short
+		{"0123456789abcdef0", "", false},               // 17 chars
+		{"zzzzzzzzzzzzzzzz", "", false},                // 16 non-hex
+		{"", "", false},                                // empty
+	}
+	for _, c := range cases {
+		gotVal, gotOK := normalizeVisitorID(c.in)
+		if gotVal != c.wantVal || gotOK != c.wantOK {
+			t.Errorf("normalizeVisitorID(%q) = (%q,%v), want (%q,%v)",
+				c.in, gotVal, gotOK, c.wantVal, c.wantOK)
+		}
+	}
+}
+
+func TestParseEvent_ValidVisitorIDNormalized(t *testing.T) {
+	e, err := ParseEvent(map[string]string{
+		"idsite": "1", "rec": "1",
+		"_id": "0123456789ABCDEF", "cid": "ABCDEF0123456789",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if e.VisitorID != "0123456789abcdef" {
+		t.Errorf("VisitorID = %q, want lowercased", e.VisitorID)
+	}
+	if e.VisitorUUID != "abcdef0123456789" {
+		t.Errorf("VisitorUUID = %q, want lowercased", e.VisitorUUID)
+	}
+	if _, ok := e.Extra["_id"]; ok {
+		t.Errorf("valid _id must not be in Extra")
+	}
+	if _, ok := e.Extra["cid"]; ok {
+		t.Errorf("valid cid must not be in Extra")
+	}
+}
+
+func TestParseEvent_InvalidVisitorIDDemotedToExtra(t *testing.T) {
+	e, err := ParseEvent(map[string]string{
+		"idsite": "1", "rec": "1",
+		"_id": "abc", "cid": "zzzzzzzzzzzzzzzz",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if e.VisitorID != "" {
+		t.Errorf("invalid _id should be cleared, got %q", e.VisitorID)
+	}
+	if e.VisitorUUID != "" {
+		t.Errorf("invalid cid should be cleared, got %q", e.VisitorUUID)
+	}
+	if e.Extra["_id"] != "abc" {
+		t.Errorf("raw invalid _id should be in Extra, got %q", e.Extra["_id"])
+	}
+	if e.Extra["cid"] != "zzzzzzzzzzzzzzzz" {
+		t.Errorf("raw invalid cid should be in Extra, got %q", e.Extra["cid"])
+	}
+}
+
+func TestParseEvent_EmptyVisitorIDStaysEmpty(t *testing.T) {
+	e, err := ParseEvent(map[string]string{"idsite": "1", "rec": "1"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if e.VisitorID != "" {
+		t.Errorf("expected empty VisitorID")
+	}
+	if _, ok := e.Extra["_id"]; ok {
+		t.Errorf("absent _id must not appear in Extra")
+	}
+}
