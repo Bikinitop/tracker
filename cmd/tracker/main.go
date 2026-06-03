@@ -10,15 +10,20 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	"github.com/bikinitop/tracker/internal/api"
+	"github.com/bikinitop/tracker/internal/circuitbreaker"
 	"github.com/bikinitop/tracker/internal/config"
 	"github.com/bikinitop/tracker/internal/nats"
+	"github.com/bikinitop/tracker/internal/ratelimit"
 )
 
 type server struct {
 	router    http.Handler
 	addr      string
 	connector natsConnector
+	limiter   *ratelimit.IPRateLimiter
 }
 
 type natsConnector interface {
@@ -38,10 +43,30 @@ func newServer(cfg *config.Config, connectFunc func(string) (natsConnector, erro
 		publisher = nats.NewClientWrapper(connector)
 	}
 
-	router := api.NewRouter(publisher)
+	// Guard publishing with a circuit breaker so a sick NATS fast-fails (503).
+	if publisher != nil && cfg.CBEnabled {
+		breaker := circuitbreaker.New(circuitbreaker.Config{
+			FailureRatio:   cfg.CBFailureRatio,
+			MinRequests:    cfg.CBMinRequests,
+			Window:         cfg.CBWindow,
+			OpenDuration:   cfg.CBOpenDuration,
+			HalfOpenProbes: cfg.CBHalfOpenProbes,
+		})
+		publisher = api.NewBreakerPublisher(publisher, breaker)
+	}
+
+	// Per-IP rate limiting on /track (429).
+	var limiter *ratelimit.IPRateLimiter
+	var routerOpts []api.RouterOption
+	if cfg.RateLimitEnabled {
+		limiter = ratelimit.NewIPRateLimiter(rate.Limit(cfg.RateLimitRPS), cfg.RateLimitBurst, cfg.RateLimitIPTTL)
+		routerOpts = append(routerOpts, api.WithRateLimiter(limiter, cfg.TrustProxy))
+	}
+
+	router := api.NewRouter(publisher, routerOpts...)
 	addr := fmt.Sprintf(":%s", cfg.Port)
 
-	return &server{router: router, addr: addr, connector: connector}, nil
+	return &server{router: router, addr: addr, connector: connector, limiter: limiter}, nil
 }
 
 func runWithContext(ctx context.Context, cfg *config.Config, connectFunc func(string) (natsConnector, error)) error {
@@ -52,6 +77,10 @@ func runWithContext(ctx context.Context, cfg *config.Config, connectFunc func(st
 
 	if srv.connector != nil {
 		defer srv.connector.Close()
+	}
+
+	if srv.limiter != nil {
+		defer srv.limiter.Stop()
 	}
 
 	server := &http.Server{

@@ -61,3 +61,28 @@ func TestRouter_UnknownEndpoint(t *testing.T) {
 		t.Errorf("expected status %d, got %d", http.StatusNotFound, rr.Code)
 	}
 }
+
+func TestRouter_RateLimitedTrackReturns429(t *testing.T) {
+	router := NewRouter(&noopPublisher{}, WithRateLimiter(&stubLimiter{allow: false}, false))
+
+	req := httptest.NewRequest(http.MethodGet, "/track?idsite=1&rec=1", nil)
+	req.RemoteAddr = "9.9.9.9:1111"
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusTooManyRequests {
+		t.Errorf("expected 429 on /track, got %d", rr.Code)
+	}
+}
+
+func TestRouter_HealthNotRateLimited(t *testing.T) {
+	router := NewRouter(&noopPublisher{}, WithRateLimiter(&stubLimiter{allow: false}, false))
+
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected /health to bypass rate limiting, got %d", rr.Code)
+	}
+}

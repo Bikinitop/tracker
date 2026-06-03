@@ -2,11 +2,13 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
+	"github.com/bikinitop/tracker/internal/circuitbreaker"
 	"github.com/bikinitop/tracker/internal/tracker"
 )
 
@@ -72,18 +74,25 @@ func TrackHandler(publisher EventPublisher) http.Handler {
 
 func processBulkRequests(w http.ResponseWriter, publisher EventPublisher, bulk *tracker.BulkRequest) {
 	successCount := 0
-	var errors []string
+	var errs []string
 	for i, reqStr := range bulk.Requests {
 		params, err := tracker.ExtractParamsFromQueryString(reqStr)
 		if err != nil {
-			errors = append(errors, fmt.Sprintf("request[%d]: %v", i, err))
+			errs = append(errs, fmt.Sprintf("request[%d]: %v", i, err))
 			continue
 		}
 		if bulk.TokenAuth != "" {
 			params["token_auth"] = bulk.TokenAuth
 		}
 		if err := publishEvent(publisher, params); err != nil {
-			errors = append(errors, fmt.Sprintf("request[%d]: %v", i, err))
+			// An open circuit is a server-wide condition, not a per-item
+			// failure. Fail the whole batch with 503 so clients back off,
+			// consistent with the single-request path.
+			if errors.Is(err, circuitbreaker.ErrCircuitOpen) {
+				http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			errs = append(errs, fmt.Sprintf("request[%d]: %v", i, err))
 			continue
 		}
 		successCount++
@@ -95,8 +104,8 @@ func processBulkRequests(w http.ResponseWriter, publisher EventPublisher, bulk *
 		"tracked": successCount,
 		"failed":  len(bulk.Requests) - successCount,
 	}
-	if len(errors) > 0 {
-		resp["errors"] = errors
+	if len(errs) > 0 {
+		resp["errors"] = errs
 	}
 	json.NewEncoder(w).Encode(resp)
 }
@@ -110,6 +119,10 @@ func processSingleRequest(w http.ResponseWriter, publisher EventPublisher, param
 
 	if publisher != nil {
 		if err := publisher.PublishEvent(event); err != nil {
+			if errors.Is(err, circuitbreaker.ErrCircuitOpen) {
+				http.Error(w, "service unavailable", http.StatusServiceUnavailable)
+				return
+			}
 			http.Error(w, "failed to publish event", http.StatusInternalServerError)
 			return
 		}
