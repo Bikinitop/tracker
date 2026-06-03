@@ -19,6 +19,10 @@ import (
 	"github.com/bikinitop/tracker/internal/ratelimit"
 )
 
+// version is the build version, overridden at release build time via
+// -ldflags "-X main.version=<tag>". Defaults to "dev" for local builds.
+var version = "dev"
+
 type server struct {
 	router    http.Handler
 	addr      string
@@ -99,7 +103,7 @@ func runWithContext(ctx context.Context, cfg *config.Config, connectFunc func(st
 		server.Shutdown(shutdownCtx)
 	}()
 
-	log.Printf("Starting tracker server on %s", srv.addr)
+	log.Printf("tracker version %s starting on %s", version, srv.addr)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("server failed: %w", err)
 	}

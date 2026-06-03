@@ -234,3 +234,9 @@ func (r *recordingResponseWriter) Write(b []byte) (int, error) {
 func (r *recordingResponseWriter) WriteHeader(status int) {
 	r.status = status
 }
+
+func TestVersionDefault(t *testing.T) {
+	if version != "dev" {
+		t.Errorf("expected default version %q, got %q", "dev", version)
+	}
+}
