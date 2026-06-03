@@ -19,7 +19,7 @@ is not validated (e.g. `rec=0` is still recorded); a missing/empty `idsite` or
 |-----------|--------|------|
 | Tracked (default) | `200` | 1x1 transparent GIF (`image/gif`) |
 | `send_image=0` or `ping=1` | `204` | empty |
-| `debug=1` | `200` | JSON debug echo (`idsite`, `action_type`) instead of the GIF |
+| `debug=1` | `200` | JSON debug echo (`idsite`, `action_type`) instead of the GIF; the event is still published |
 | Missing `idsite`/`rec`, or unparsable | `400` | error text |
 | Per-IP rate limit exceeded | `429` | `rate limit exceeded` (+ `Retry-After` header) |
 | NATS publish circuit open | `503` | `service unavailable` |
@@ -52,7 +52,7 @@ maps them into the published event. Parameters outside this set (and outside the
 | `url` | Full URL of the page |
 | `action_name` | Page/action title |
 | `urlref` | Referrer URL |
-| `_id` | Visitor ID (16-char hex) |
+| `_id` | Visitor ID (Matomo uses a 16-char hex string; not validated here) |
 | `uid` | User ID |
 | `cid` | Visitor UUID override |
 | `new_visit` | Force a new visit (`1`) |
@@ -126,9 +126,9 @@ maps them into the published event. Parameters outside this set (and outside the
 
 | Param | Meaning |
 |-------|---------|
-| `ping` | Heartbeat (`1`) — updates visit duration, no new action; returns `204` |
+| `ping` | Heartbeat (`1`) — classified as `action_type=heartbeat`; returns `204` (no GIF) |
 | `send_image` | `0` to receive `204` instead of the GIF |
-| `debug` | `1` to receive a JSON echo instead of tracking output |
+| `debug` | `1` to receive a JSON echo response instead of the GIF (the event is still published) |
 
 For any parameter not listed here, see the
 [Matomo Tracking API reference](https://developer.matomo.org/api-reference/tracking-api).
@@ -186,5 +186,6 @@ tracker.{site_id}.{action_type}
 | `content_impression` | `c_n` set |
 | `pageview` | default |
 
-NATS wildcard characters in the site ID / action type are sanitized so they
-cannot break subject routing. The payload is the full parsed event as JSON.
+NATS wildcard characters (`.`, `*`, `>`) in the site ID / action type are
+sanitized so they cannot break subject routing. The payload is the parsed event
+(the recognized fields above) serialized as JSON.

@@ -64,10 +64,13 @@ it admits a few probes and closes again on success.
 | `TRACKER_CB_OPEN_DURATION` | `5s` | Time the breaker stays open before probing (Half-Open) |
 | `TRACKER_CB_HALF_OPEN_PROBES` | `5` | Successful probes required to close the breaker again |
 
-Invalid values are clamped to safe defaults in the breaker constructor (e.g. a
-`FailureRatio` outside `(0, 1]` → `0.5`, `MinRequests < 1` → `1`) so a
-misconfiguration can't make the breaker trip under healthy load or never
-recover.
+Out-of-range values are clamped to the defaults in the breaker constructor
+(`FailureRatio` outside `(0, 1]` → `0.5`; `MinRequests < 1` → `1`; non-positive
+`Window`/`OpenDuration` → `10s`/`5s`; `HalfOpenProbes < 1` → `1`). This guards
+against the pathological invalid configs — e.g. `FailureRatio=0` would otherwise
+trip the breaker with zero failures, and `HalfOpenProbes=0` would leave it
+unable to recover. It does **not** override valid-but-aggressive values you set
+intentionally (a low `FailureRatio` will still trip readily).
 
 ## Durations
 
