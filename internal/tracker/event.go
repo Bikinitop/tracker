@@ -120,9 +120,10 @@ type Event struct {
 	// Bulk tracking
 	BulkRequests []string `json:"requests,omitempty"`
 
-	// Extra holds request parameters not otherwise recognized by the parser, so
-	// nothing the client sends is dropped from the published payload. Empty when
-	// every parameter was recognized.
+	// Extra holds request parameters the parser did not place in a named field:
+	// unrecognized params, plus recognized-but-invalid visitor IDs demoted here
+	// (e.g. a malformed _id/cid). Nothing the client sends is dropped. Empty when
+	// every parameter was recognized and valid.
 	Extra map[string]string `json:"extra,omitempty"`
 }
 
@@ -276,22 +277,8 @@ func ParseEvent(params map[string]string) (*Event, error) {
 	// Validate visitor IDs: keep valid 16-hex values (lowercased) and demote
 	// invalid ones into Extra so a bad ID is forwarded, not trusted as a visitor
 	// key. Matches Matomo's "ignore invalid ID, still track" behavior.
-	if e.VisitorID != "" {
-		if norm, ok := normalizeVisitorID(e.VisitorID); ok {
-			e.VisitorID = norm
-		} else {
-			e.Extra = stashExtra(e.Extra, "_id", e.VisitorID)
-			e.VisitorID = ""
-		}
-	}
-	if e.VisitorUUID != "" {
-		if norm, ok := normalizeVisitorID(e.VisitorUUID); ok {
-			e.VisitorUUID = norm
-		} else {
-			e.Extra = stashExtra(e.Extra, "cid", e.VisitorUUID)
-			e.VisitorUUID = ""
-		}
-	}
+	e.validateID(&e.VisitorID, "_id")
+	e.validateID(&e.VisitorUUID, "cid")
 
 	e.ActionType = detectActionType(params)
 
@@ -312,42 +299,66 @@ func collectExtra(params map[string]string) map[string]string {
 		if strings.HasPrefix(key, "dimension") {
 			continue // already captured in VisitDimensions/ActionDimensions
 		}
-		if extra == nil {
-			extra = make(map[string]string)
-		}
-		extra[key] = val
+		extra = stashExtra(extra, key, val)
 	}
 	return extra
 }
 
-// normalizeVisitorID returns the lowercased id and ok=true when v is a
-// 16-character hexadecimal string; otherwise ok=false. A single pass validates
-// and lowercases, avoiding a regexp allocation on the request path.
-func normalizeVisitorID(v string) (string, bool) {
-	if len(v) != 16 {
-		return "", false
-	}
-	b := []byte(v)
-	for i := range b {
-		switch c := b[i]; {
-		case c >= '0' && c <= '9', c >= 'a' && c <= 'f':
-			// valid digit / lowercase hex
-		case c >= 'A' && c <= 'F':
-			b[i] = c + ('a' - 'A') // normalize to lowercase
-		default:
-			return "", false
-		}
-	}
-	return string(b), true
-}
-
-// stashExtra adds k=v to m, allocating m if nil, and returns it.
+// stashExtra adds k=v to m, allocating m if nil, and returns it. It is the
+// single "ensure map, insert" primitive used to build Event.Extra.
 func stashExtra(m map[string]string, k, v string) map[string]string {
 	if m == nil {
 		m = make(map[string]string)
 	}
 	m[k] = v
 	return m
+}
+
+// validateID normalizes a 16-hex visitor-ID field (*field) in place: a valid
+// value is lowercased; an invalid one is moved to Extra and the field cleared,
+// so a malformed ID is forwarded but not trusted as a visitor key. Empty is
+// left as-is (a missing visitor ID is normal).
+func (e *Event) validateID(field *string, key string) {
+	if *field == "" {
+		return
+	}
+	if norm, ok := normalizeVisitorID(*field); ok {
+		*field = norm
+	} else {
+		e.Extra = stashExtra(e.Extra, key, *field)
+		*field = ""
+	}
+}
+
+// normalizeVisitorID returns ok=true when v is a 16-character hexadecimal
+// string, along with v lowercased. The common case (already lowercase) returns
+// v unchanged with no allocation; a copy is made only when an uppercase hex
+// digit must be lowered.
+func normalizeVisitorID(v string) (string, bool) {
+	if len(v) != 16 {
+		return "", false
+	}
+	needsLower := false
+	for i := 0; i < len(v); i++ {
+		switch c := v[i]; {
+		case c >= '0' && c <= '9', c >= 'a' && c <= 'f':
+			// valid digit / lowercase hex
+		case c >= 'A' && c <= 'F':
+			needsLower = true
+		default:
+			return "", false
+		}
+	}
+	if !needsLower {
+		return v, true // already valid lowercase — no allocation
+	}
+	b := []byte(v)
+	for i := range b {
+		if c := b[i]; c >= 'A' && c <= 'F' {
+			b[i] = c + ('a' - 'A')
+		}
+	}
+	return string(b), true
 }
 
 // detectActionType determines what kind of action is being tracked
