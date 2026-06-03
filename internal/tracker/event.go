@@ -119,6 +119,45 @@ type Event struct {
 
 	// Bulk tracking
 	BulkRequests []string `json:"requests,omitempty"`
+
+	// Extra holds request parameters not otherwise recognized by the parser, so
+	// nothing the client sends is dropped from the published payload. Empty when
+	// every parameter was recognized.
+	Extra map[string]string `json:"extra,omitempty"`
+}
+
+// handledParams lists every parameter key ParseEvent maps to a struct field
+// (including the plugin-flag keys, seeded in init). Keys NOT in this set, and
+// not prefixed with "dimension", are forwarded verbatim in Event.Extra. The
+// TestParseEvent_HandledParamsCoverAllMappedKeys drift guard reflects over the
+// Event struct's json tags and fails if an input field's key is missing here,
+// so a forgotten entry can't silently double-publish into Extra.
+var handledParams = map[string]struct{}{
+	"idsite": {}, "rec": {}, "action_name": {}, "url": {}, "_id": {},
+	"rand": {}, "apiv": {}, "urlref": {}, "res": {}, "h": {}, "m": {}, "s": {},
+	"ua": {}, "uadata": {}, "lang": {}, "uid": {}, "cid": {}, "new_visit": {},
+	"_cvar": {}, "cookie": {}, "_rcn": {}, "_rck": {}, "cvar": {}, "link": {},
+	"download": {}, "search": {}, "search_cat": {}, "search_count": {},
+	"pv_id": {}, "idgoal": {}, "revenue": {}, "cs": {}, "ca": {},
+	"pf_net": {}, "pf_srv": {}, "pf_tfr": {}, "pf_dm1": {}, "pf_dm2": {}, "pf_onl": {},
+	"e_c": {}, "e_a": {}, "e_n": {}, "e_v": {},
+	"c_n": {}, "c_p": {}, "c_t": {}, "c_i": {},
+	"ec_id": {}, "ec_items": {}, "ec_st": {}, "ec_tx": {}, "ec_sh": {}, "ec_dt": {},
+	"_pkc": {}, "_pkp": {}, "_pks": {}, "_pkn": {},
+	"send_image": {}, "ping": {}, "recMode": {}, "bots": {}, "http_status": {},
+	"bw_bytes": {}, "source": {}, "token_auth": {}, "cip": {}, "cdt": {},
+	"country": {}, "region": {}, "city": {}, "lat": {}, "long": {}, "debug": {},
+}
+
+// pluginKeys are the Matomo plugin-availability flags, mapped into Event.Plugins.
+// They are the single source of truth for both the plugin-parsing loop and the
+// handledParams set (seeded in init), so the two can't drift.
+var pluginKeys = []string{"fla", "java", "dir", "qt", "realp", "pdf", "wma", "gears", "ag"}
+
+func init() {
+	for _, k := range pluginKeys {
+		handledParams[k] = struct{}{}
+	}
 }
 
 // ParseEvent validates and parses tracking parameters into an Event
@@ -211,7 +250,7 @@ func ParseEvent(params map[string]string) (*Event, error) {
 
 	// Parse plugin flags
 	e.Plugins = make(map[string]string)
-	for _, plugin := range []string{"fla", "java", "dir", "qt", "realp", "pdf", "wma", "gears", "ag"} {
+	for _, plugin := range pluginKeys {
 		if v := params[plugin]; v != "" {
 			e.Plugins[plugin] = v
 		}
@@ -230,9 +269,35 @@ func ParseEvent(params map[string]string) (*Event, error) {
 		}
 	}
 
+	// Forward any parameter the parser did not otherwise capture, so nothing the
+	// client sends is dropped from the published payload.
+	e.Extra = collectExtra(params)
+
 	e.ActionType = detectActionType(params)
 
 	return e, nil
+}
+
+// collectExtra returns the parameters not captured elsewhere by the parser
+// (i.e. not in handledParams and not a dimension*), so they are forwarded in
+// the published payload rather than dropped. It returns nil when there are
+// none, so the omitempty JSON tag drops the field and no map is allocated on
+// the common all-recognized path.
+func collectExtra(params map[string]string) map[string]string {
+	var extra map[string]string
+	for key, val := range params {
+		if _, known := handledParams[key]; known {
+			continue
+		}
+		if strings.HasPrefix(key, "dimension") {
+			continue // already captured in VisitDimensions/ActionDimensions
+		}
+		if extra == nil {
+			extra = make(map[string]string)
+		}
+		extra[key] = val
+	}
+	return extra
 }
 
 // detectActionType determines what kind of action is being tracked
