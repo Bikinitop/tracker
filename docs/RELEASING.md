@@ -38,5 +38,7 @@ docker run --rm -p 8080:8080 \
   ghcr.io/bikinitop/tracker:latest
 ```
 
-The container logs its build version on startup
-(`tracker version v1.0.0 starting on :8080`).
+The container listens on `8080` by default; override with `-e TRACKER_PORT=...`.
+
+On startup it logs a line ending in `tracker version v1.0.0 starting on :8080`
+(prefixed with the standard Go `log` timestamp).
