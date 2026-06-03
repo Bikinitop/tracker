@@ -448,12 +448,32 @@ func TestParseEvent_EmptyValuedUnknownParamForwarded(t *testing.T) {
 
 func TestEvent_ExtraOmittedFromJSONWhenEmpty(t *testing.T) {
 	e, _ := ParseEvent(map[string]string{"idsite": "1", "rec": "1"})
+	// Assert nil (not just absent from JSON) to lock the lazy-allocation
+	// contract: a zero-length map would also be dropped by omitempty, so the
+	// JSON check alone wouldn't catch a regression back to eager make().
+	if e.Extra != nil {
+		t.Errorf("Extra should be nil when no unknown params, got %v", e.Extra)
+	}
 	b, err := json.Marshal(e)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
 	if strings.Contains(string(b), "\"extra\"") {
 		t.Errorf("did not expect 'extra' key in JSON: %s", b)
+	}
+}
+
+func TestEvent_DimensionsOmittedFromJSONWhenEmpty(t *testing.T) {
+	e, _ := ParseEvent(map[string]string{"idsite": "1", "rec": "1"})
+	if e.Dimensions != nil {
+		t.Errorf("Dimensions should be nil when no dimensionN params, got %v", e.Dimensions)
+	}
+	b, err := json.Marshal(e)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(b), "\"dimensions\"") {
+		t.Errorf("did not expect 'dimensions' key in JSON: %s", b)
 	}
 }
 
@@ -509,6 +529,26 @@ func TestParseEvent_DimensionKeysNotInExtra(t *testing.T) {
 	}
 	if e.Dimensions["dimension42"] != "b" {
 		t.Errorf("dimension42 not captured in Dimensions: %v", e.Dimensions)
+	}
+}
+
+// classifyParams routes a "dimension"-prefixed key to Dimensions before the
+// handledParams check, so the match is by prefix, not the strict dimension{N}
+// form. Pin that intentional behavior: a non-numeric suffix still lands in
+// Dimensions and never in Extra, so a future tightening to a numeric match is a
+// conscious change rather than an accidental break.
+func TestParseEvent_DimensionPrefixRoutingIsByPrefix(t *testing.T) {
+	e, err := ParseEvent(map[string]string{
+		"idsite": "1", "rec": "1", "dimensionfoo": "v",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if e.Dimensions["dimensionfoo"] != "v" {
+		t.Errorf("dimension-prefixed key should route to Dimensions: %v", e.Dimensions)
+	}
+	if _, leaked := e.Extra["dimensionfoo"]; leaked {
+		t.Errorf("dimension-prefixed key must not appear in Extra: %v", e.Extra)
 	}
 }
 

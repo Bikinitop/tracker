@@ -124,7 +124,7 @@ parameters:
 | `token_auth` | Auth token (forwarded on the event; **not** validated by this service) |
 | `cip` | Override visitor IP |
 | `cdt` | Override datetime |
-| `cdo` | Datetime offset in seconds, subtracted from the effective event time (`cdt - abs(cdo)`); used by offline/queued SDKs to backdate events |
+| `cdo` | Datetime offset in seconds. In Matomo the effective event time is `cdt - abs(cdo)` (offline/queued SDKs use it to backdate events). This service forwards `cdo` unchanged — a downstream consumer applies it. |
 | `country` / `region` / `city` / `lat` / `long` | Geolocation overrides |
 
 > **Security note:** In Matomo these overrides require a valid `token_auth`.
