@@ -2,6 +2,7 @@ package tracker
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -430,22 +431,63 @@ func TestEvent_ExtraPresentInJSON(t *testing.T) {
 	}
 }
 
-// Drift guard: every key the parser maps to a field must be in handledParams,
-// so a newly added field can never silently double-publish into Extra. Setting
-// every handled key to a sentinel must leave Extra empty.
+// Drift guard: each Event field populated from a single query param has a json
+// tag equal to that param's key. Assert every such key is in handledParams, so a
+// newly added input field that's forgotten in handledParams fails CI instead of
+// silently double-publishing (once in its named field, once in Extra).
+// Computed/aggregate fields (not read from a single param) are exempted.
 func TestParseEvent_HandledParamsCoverAllMappedKeys(t *testing.T) {
-	params := make(map[string]string)
-	for k := range handledParams {
-		params[k] = "x"
+	computed := map[string]struct{}{
+		"action_type": {}, "visit_dimensions": {}, "action_dimensions": {},
+		"plugins": {}, "extra": {}, "requests": {},
 	}
-	params["idsite"] = "1"
-	params["rec"] = "1"
-	e, err := ParseEvent(params)
+	typ := reflect.TypeOf(Event{})
+	for i := 0; i < typ.NumField(); i++ {
+		name, _, _ := strings.Cut(typ.Field(i).Tag.Get("json"), ",")
+		if name == "" || name == "-" {
+			continue
+		}
+		if _, exempt := computed[name]; exempt {
+			continue
+		}
+		if _, ok := handledParams[name]; !ok {
+			t.Errorf("Event.%s (json %q) is not in handledParams; it would double-publish into Extra",
+				typ.Field(i).Name, name)
+		}
+	}
+}
+
+func TestParseEvent_DimensionKeysNotInExtra(t *testing.T) {
+	e, err := ParseEvent(map[string]string{
+		"idsite": "1", "rec": "1", "dimension1": "a", "dimension42": "b",
+	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(e.Extra) != 0 {
-		t.Errorf("handledParams missing keys; these leaked into Extra: %v", e.Extra)
+		t.Errorf("dimensions must go to VisitDimensions, not Extra: %v", e.Extra)
+	}
+	if e.VisitDimensions["dimension1"] != "a" {
+		t.Errorf("dimension1 not captured in VisitDimensions: %v", e.VisitDimensions)
+	}
+}
+
+func TestParseEvent_PluginKeysNotInExtra(t *testing.T) {
+	params := map[string]string{"idsite": "1", "rec": "1"}
+	for _, k := range pluginKeys {
+		params[k] = "1"
+	}
+	e, err := ParseEvent(params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	for _, k := range pluginKeys {
+		if _, leaked := e.Extra[k]; leaked {
+			t.Errorf("plugin flag %q leaked into Extra", k)
+		}
+		if e.Plugins[k] != "1" {
+			t.Errorf("plugin flag %q not captured in Plugins", k)
+		}
 	}
 }
 

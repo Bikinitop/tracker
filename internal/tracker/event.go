@@ -127,10 +127,11 @@ type Event struct {
 }
 
 // handledParams lists every parameter key ParseEvent maps to a struct field
-// (including the plugin-flag keys). Keys NOT in this set, and not prefixed with
-// "dimension", are forwarded verbatim in Event.Extra. Keep this in sync with the
-// field mapping in ParseEvent — the TestParseEvent_HandledParamsCoverAllMappedKeys
-// drift guard enforces it.
+// (including the plugin-flag keys, seeded in init). Keys NOT in this set, and
+// not prefixed with "dimension", are forwarded verbatim in Event.Extra. The
+// TestParseEvent_HandledParamsCoverAllMappedKeys drift guard reflects over the
+// Event struct's json tags and fails if an input field's key is missing here,
+// so a forgotten entry can't silently double-publish into Extra.
 var handledParams = map[string]struct{}{
 	"idsite": {}, "rec": {}, "action_name": {}, "url": {}, "_id": {},
 	"rand": {}, "apiv": {}, "urlref": {}, "res": {}, "h": {}, "m": {}, "s": {},
