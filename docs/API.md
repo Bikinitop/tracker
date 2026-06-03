@@ -52,7 +52,7 @@ The full Matomo parameter set is supported; the most-used ones:
 | `_cvar` / `cvar` | Visit / page custom variables (JSON) |
 | `cs` | Page charset |
 | `pv_id` | Page-view ID |
-| `rand` | Cache-buster (ignored) |
+| `rand` | Cache-buster — recorded but has no effect on processing |
 | `apiv` | Tracking API version |
 
 **Events** (`e_c` + `e_a` required for an event)
