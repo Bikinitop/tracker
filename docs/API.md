@@ -28,7 +28,10 @@ returns `200`.
 
 ### Common parameters
 
-The full Matomo parameter set is supported; the most-used ones:
+The parser recognizes the broad subset of Matomo parameters listed below and
+maps them into the published event. Parameters outside this set (and outside the
+`dimension{N}` / plugin-flag conventions) are accepted by the request but are
+**not** carried into the NATS payload. The most-used recognized parameters:
 
 **Required**
 
@@ -99,14 +102,20 @@ The full Matomo parameter set is supported; the most-used ones:
 | `dimension{N}` | Custom dimension N (visit-scoped, or action-scoped when `ca=1`) |
 | `fla` `java` `dir` `qt` `realp` `pdf` `wma` `gears` `ag` | Plugin availability flags |
 
-**Authenticated overrides** (require `token_auth`)
+**Override params** (forwarded as-is — see security note)
 
 | Param | Meaning |
 |-------|---------|
-| `token_auth` | Auth token for privileged params |
+| `token_auth` | Auth token (forwarded on the event; **not** validated by this service) |
 | `cip` | Override visitor IP |
 | `cdt` | Override datetime |
 | `country` / `region` / `city` / `lat` / `long` | Geolocation overrides |
+
+> **Security note:** In Matomo these overrides require a valid `token_auth`.
+> This service does **not** enforce that — it copies `token_auth`, `cip`, `cdt`,
+> and the geo params onto the event and publishes them regardless. Any client
+> can set them. If downstream consumers act on these fields, they must validate
+> `token_auth` themselves (or you must enforce it in front of the tracker).
 
 **Control**
 
