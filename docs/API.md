@@ -59,7 +59,9 @@ parameters:
 |-------|---------|
 | `url` | Full URL of the page |
 | `action_name` | Page/action title |
-| `urlref` | Referrer URL |
+| `urlref` | Referrer URL of this request |
+| `_ref` | Attribution referrer (from the visitor cookie) — the referrer the visit is attributed to, distinct from `urlref` |
+| `_refts` | Attribution referrer timestamp |
 | `_id` | Visitor ID. Validated as a 16-char hex string, normalized to lowercase. An invalid value is moved to `extra` and the visitor is treated as new (the hit is still tracked). |
 | `uid` | User ID |
 | `cid` | Visitor ID override. Validated/normalized like `_id` (format only; `token_auth` is not enforced — see the security note below). |
@@ -112,7 +114,7 @@ parameters:
 
 | Param | Meaning |
 |-------|---------|
-| `dimension{N}` | Custom dimension N (visit-scoped, or action-scoped when `ca=1`) |
+| `dimension{N}` | Custom dimension N. All `dimension{N}` params are forwarded verbatim in a single `dimensions` object; scope (visit vs action) is fixed server-side per dimension and is assigned by the downstream consumer, not inferred from `ca`. |
 | `fla` `java` `dir` `qt` `realp` `pdf` `wma` `gears` `ag` | Plugin availability flags |
 
 **Override params** (forwarded as-is — see security note)
@@ -122,6 +124,7 @@ parameters:
 | `token_auth` | Auth token (forwarded on the event; **not** validated by this service) |
 | `cip` | Override visitor IP |
 | `cdt` | Override datetime |
+| `cdo` | Datetime offset in seconds, subtracted from the effective event time (`cdt - abs(cdo)`); used by offline/queued SDKs to backdate events |
 | `country` / `region` / `city` / `lat` / `long` | Geolocation overrides |
 
 > **Security note:** In Matomo these overrides require a valid `token_auth`.
@@ -196,10 +199,13 @@ tracker.{site_id}.{action_type}
 
 NATS wildcard characters (`.`, `*`, `>`) in the site ID / action type are
 sanitized so they cannot break subject routing. The payload is the parsed event
-serialized as JSON: recognized parameters appear as named fields, and any other
-parameters the client sent appear under an `extra` object, e.g.:
+serialized as JSON: recognized parameters appear as named fields, custom
+dimensions are grouped under a `dimensions` object, and any other parameters the
+client sent appear under an `extra` object, e.g.:
 
 ```json
 { "idsite": "1", "rec": "1", "action_type": "pageview",
-  "extra": { "_idvc": "3", "_ref": "https://google.com" } }
+  "_ref": "https://google.com",
+  "dimensions": { "dimension1": "a", "dimension5": "b" },
+  "extra": { "_idvc": "3", "_viewts": "1699999999" } }
 ```
