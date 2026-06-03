@@ -23,8 +23,11 @@ URL-encoded form body (POST). The minimum required parameters are `idsite` and
 | NATS publish circuit open | `503` | `service unavailable` |
 | Other publish failure | `500` | `failed to publish event` |
 
-CORS is permissive (`Access-Control-Allow-Origin: *`), and `OPTIONS` preflight
-returns `200`.
+CORS is permissive (`Access-Control-Allow-Origin: *`), and an `OPTIONS` preflight
+returns `200` — **as long as the client IP is within its rate-limit quota**.
+`/track` (including `OPTIONS`) passes through the per-IP limiter first, so a
+preflight from an over-quota IP receives `429`. Only `/health` is exempt from
+rate limiting.
 
 ### Common parameters
 

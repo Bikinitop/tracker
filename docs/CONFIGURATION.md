@@ -41,9 +41,12 @@ quota the request gets `429 Too Many Requests` with a `Retry-After` header.
   the tracker sits behind a proxy/load balancer that sets `X-Forwarded-For`;
   otherwise a client could spoof the header to dodge the per-IP limit.
 
-Invalid values are clamped to safe defaults (`burst < 1` → `1`, non-positive
-`rps` → unlimited, non-positive TTL → `1m`) so a misconfiguration can't disable
-the limiter or leak memory.
+Out-of-range values are clamped so the limiter can't crash or leak memory:
+`burst < 1` → `1`, non-positive TTL → `1m`. **Note:** a non-positive
+`TRACKER_RATELIMIT_RPS` is clamped to an *unlimited* rate — the limiter stays
+"enabled" but applies no throttling, so set a positive value to keep per-IP
+protection. To turn limiting off intentionally, use
+`TRACKER_RATELIMIT_ENABLED=false`.
 
 ## NATS-publish circuit breaker
 
