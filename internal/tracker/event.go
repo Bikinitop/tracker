@@ -146,9 +146,17 @@ var handledParams = map[string]struct{}{
 	"send_image": {}, "ping": {}, "recMode": {}, "bots": {}, "http_status": {},
 	"bw_bytes": {}, "source": {}, "token_auth": {}, "cip": {}, "cdt": {},
 	"country": {}, "region": {}, "city": {}, "lat": {}, "long": {}, "debug": {},
-	// plugin flags (mapped into Plugins)
-	"fla": {}, "java": {}, "dir": {}, "qt": {}, "realp": {}, "pdf": {},
-	"wma": {}, "gears": {}, "ag": {},
+}
+
+// pluginKeys are the Matomo plugin-availability flags, mapped into Event.Plugins.
+// They are the single source of truth for both the plugin-parsing loop and the
+// handledParams set (seeded in init), so the two can't drift.
+var pluginKeys = []string{"fla", "java", "dir", "qt", "realp", "pdf", "wma", "gears", "ag"}
+
+func init() {
+	for _, k := range pluginKeys {
+		handledParams[k] = struct{}{}
+	}
 }
 
 // ParseEvent validates and parses tracking parameters into an Event
@@ -241,7 +249,7 @@ func ParseEvent(params map[string]string) (*Event, error) {
 
 	// Parse plugin flags
 	e.Plugins = make(map[string]string)
-	for _, plugin := range []string{"fla", "java", "dir", "qt", "realp", "pdf", "wma", "gears", "ag"} {
+	for _, plugin := range pluginKeys {
 		if v := params[plugin]; v != "" {
 			e.Plugins[plugin] = v
 		}
@@ -262,7 +270,20 @@ func ParseEvent(params map[string]string) (*Event, error) {
 
 	// Forward any parameter the parser did not otherwise capture, so nothing the
 	// client sends is dropped from the published payload.
-	extra := make(map[string]string)
+	e.Extra = collectExtra(params)
+
+	e.ActionType = detectActionType(params)
+
+	return e, nil
+}
+
+// collectExtra returns the parameters not captured elsewhere by the parser
+// (i.e. not in handledParams and not a dimension*), so they are forwarded in
+// the published payload rather than dropped. It returns nil when there are
+// none, so the omitempty JSON tag drops the field and no map is allocated on
+// the common all-recognized path.
+func collectExtra(params map[string]string) map[string]string {
+	var extra map[string]string
 	for key, val := range params {
 		if _, known := handledParams[key]; known {
 			continue
@@ -270,15 +291,12 @@ func ParseEvent(params map[string]string) (*Event, error) {
 		if strings.HasPrefix(key, "dimension") {
 			continue // already captured in VisitDimensions/ActionDimensions
 		}
+		if extra == nil {
+			extra = make(map[string]string)
+		}
 		extra[key] = val
 	}
-	if len(extra) > 0 {
-		e.Extra = extra
-	}
-
-	e.ActionType = detectActionType(params)
-
-	return e, nil
+	return extra
 }
 
 // detectActionType determines what kind of action is being tracked
