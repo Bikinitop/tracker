@@ -506,3 +506,130 @@ func BenchmarkParseEvent(b *testing.B) {
 		}
 	}
 }
+
+func TestNormalizeVisitorID(t *testing.T) {
+	cases := []struct {
+		in      string
+		wantVal string
+		wantOK  bool
+	}{
+		{"0123456789abcdef", "0123456789abcdef", true},
+		{"0123456789ABCDEF", "0123456789abcdef", true}, // uppercase normalized
+		{"AbCdEf0123456789", "abcdef0123456789", true}, // mixed case
+		{"abc123def4567890", "abc123def4567890", true}, // existing test value
+		{"abc", "", false},                             // too short
+		{"0123456789abcdef0", "", false},               // 17 chars
+		{"zzzzzzzzzzzzzzzz", "", false},                // 16 non-hex
+		{"", "", false},                                // empty
+	}
+	for _, c := range cases {
+		gotVal, gotOK := normalizeVisitorID(c.in)
+		if gotVal != c.wantVal || gotOK != c.wantOK {
+			t.Errorf("normalizeVisitorID(%q) = (%q,%v), want (%q,%v)",
+				c.in, gotVal, gotOK, c.wantVal, c.wantOK)
+		}
+	}
+}
+
+func TestParseEvent_ValidVisitorIDNormalized(t *testing.T) {
+	e, err := ParseEvent(map[string]string{
+		"idsite": "1", "rec": "1",
+		"_id": "0123456789ABCDEF", "cid": "ABCDEF0123456789",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if e.VisitorID != "0123456789abcdef" {
+		t.Errorf("VisitorID = %q, want lowercased", e.VisitorID)
+	}
+	if e.VisitorUUID != "abcdef0123456789" {
+		t.Errorf("VisitorUUID = %q, want lowercased", e.VisitorUUID)
+	}
+	if _, ok := e.Extra["_id"]; ok {
+		t.Errorf("valid _id must not be in Extra")
+	}
+	if _, ok := e.Extra["cid"]; ok {
+		t.Errorf("valid cid must not be in Extra")
+	}
+}
+
+func TestParseEvent_InvalidVisitorIDDemotedToExtra(t *testing.T) {
+	e, err := ParseEvent(map[string]string{
+		"idsite": "1", "rec": "1",
+		"_id": "abc", "cid": "zzzzzzzzzzzzzzzz",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if e.VisitorID != "" {
+		t.Errorf("invalid _id should be cleared, got %q", e.VisitorID)
+	}
+	if e.VisitorUUID != "" {
+		t.Errorf("invalid cid should be cleared, got %q", e.VisitorUUID)
+	}
+	if e.Extra["_id"] != "abc" {
+		t.Errorf("raw invalid _id should be in Extra, got %q", e.Extra["_id"])
+	}
+	if e.Extra["cid"] != "zzzzzzzzzzzzzzzz" {
+		t.Errorf("raw invalid cid should be in Extra, got %q", e.Extra["cid"])
+	}
+}
+
+func TestParseEvent_EmptyVisitorIDStaysEmpty(t *testing.T) {
+	e, err := ParseEvent(map[string]string{"idsite": "1", "rec": "1"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if e.VisitorID != "" {
+		t.Errorf("expected empty VisitorID")
+	}
+	if _, ok := e.Extra["_id"]; ok {
+		t.Errorf("absent _id must not appear in Extra")
+	}
+}
+
+// Cross-product: each invalid kind (too short / too long / non-hex) demotes the
+// right field under the right key while the OTHER field's valid ID survives —
+// guarding the two hardcoded validateID call sites against a key/field mix-up
+// or one bad ID clobbering the other.
+func TestParseEvent_InvalidVisitorID_AllKindsBothFields(t *testing.T) {
+	invalids := map[string]string{
+		"tooShort": "abc",
+		"tooLong":  "0123456789abcdef0", // 17 chars
+		"nonHex":   "zzzzzzzzzzzzzzzz",
+	}
+	for name, bad := range invalids {
+		t.Run(name, func(t *testing.T) {
+			// _id invalid, cid valid → only _id demoted; cid survives lowercased.
+			e, err := ParseEvent(map[string]string{
+				"idsite": "1", "rec": "1", "_id": bad, "cid": "ABCDEF0123456789",
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if e.VisitorID != "" || e.Extra["_id"] != bad {
+				t.Errorf("_id: got VisitorID=%q Extra[_id]=%q, want \"\" and %q", e.VisitorID, e.Extra["_id"], bad)
+			}
+			if e.VisitorUUID != "abcdef0123456789" {
+				t.Errorf("valid cid should survive lowercased, got %q", e.VisitorUUID)
+			}
+			if _, ok := e.Extra["cid"]; ok {
+				t.Errorf("valid cid must not be in Extra")
+			}
+
+			// Symmetric: cid invalid, _id valid.
+			e2, err := ParseEvent(map[string]string{
+				"idsite": "1", "rec": "1", "_id": "0123456789ABCDEF", "cid": bad,
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if e2.VisitorUUID != "" || e2.Extra["cid"] != bad {
+				t.Errorf("cid: got VisitorUUID=%q Extra[cid]=%q, want \"\" and %q", e2.VisitorUUID, e2.Extra["cid"], bad)
+			}
+			if e2.VisitorID != "0123456789abcdef" {
+				t.Errorf("valid _id should survive lowercased, got %q", e2.VisitorID)
+			}
+		})
+	}
+}

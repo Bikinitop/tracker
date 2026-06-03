@@ -41,6 +41,11 @@ convention) is still forwarded — it is collected verbatim into an `extra` obje
 on the event, so nothing the client sends is dropped. The most-used named
 parameters:
 
+> **Visitor IDs:** `_id` and `cid` must be 16-character hex strings. Valid
+> values are normalized to lowercase; an invalid value is forwarded under
+> `extra` (e.g. `extra._id`) and the typed field is left empty, so downstream
+> session logic doesn't key on a malformed ID. The request is still tracked.
+
 **Required**
 
 | Param | Meaning |
@@ -55,9 +60,9 @@ parameters:
 | `url` | Full URL of the page |
 | `action_name` | Page/action title |
 | `urlref` | Referrer URL |
-| `_id` | Visitor ID (Matomo uses a 16-char hex string; not validated here) |
+| `_id` | Visitor ID. Validated as a 16-char hex string, normalized to lowercase. An invalid value is moved to `extra` and the visitor is treated as new (the hit is still tracked). |
 | `uid` | User ID |
-| `cid` | Visitor UUID override |
+| `cid` | Visitor ID override. Validated/normalized like `_id` (format only; `token_auth` is not enforced — see the security note below). |
 | `new_visit` | Force a new visit (`1`) |
 | `res` | Screen resolution (e.g. `1920x1080`) |
 | `ua` | User agent override |
